@@ -12,9 +12,9 @@ fi
 extract_section() {
   local header="$1"
   awk -v h="$header" '
-    $0 ~ "^## " h "$" {in=1; print; next}
-    $0 ~ "^## " {if (in) exit}
-    in {print}
+    $0 ~ "^## " h "$" {in_section=1; print; next}
+    $0 ~ "^## " {if (in_section) exit}
+    in_section {print}
   ' "$notes_file"
 }
 
