@@ -196,15 +196,15 @@ verify: check-go
 
 # Select a VM config interactively and bootstrap it
 run: build-cli
-	@bin/vmbootstrap run $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),)
+	@bin/vmbootstrap run $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
 
 # Smoke test (bootstrap + minimal post-install checks + optional cleanup)
 smoke: build-cli
-	@bin/vmbootstrap smoke $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),)
+	@bin/vmbootstrap smoke $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
 
 # Interactive config manager (create/edit VM configs)
 config: build-cli
-	@bin/vmbootstrap $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),)
+	@bin/vmbootstrap $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
 
 # Install all required external tools
 install-requirements:

@@ -190,7 +190,7 @@ func bootstrapVM(vmConfigPath string) error {
 	fmt.Print("\r\033[K")
 	fmt.Println()
 
-	logger := newPrettyLogger(os.Stdout)
+	logger := getLogger()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMinutes)*time.Minute)
 	defer cancel()

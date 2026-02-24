@@ -10,6 +10,7 @@ import (
 )
 
 var vcenterConfigFile string
+var debugLogs bool
 
 // mainSigCh receives SIGINT for the default (non-bootstrap) handler.
 // bootstrapVM temporarily stops delivery to this channel so it can handle
@@ -21,6 +22,9 @@ var rootCmd = &cobra.Command{
 	Short:         "Manage and bootstrap Ubuntu VMs in VMware vCenter",
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		_ = initDebugLogger()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := checkRequirements(); err != nil {
 			return err
@@ -74,6 +78,7 @@ var smokeCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
 		"Path to vCenter config file (SOPS encrypted)")
+	rootCmd.PersistentFlags().BoolVar(&debugLogs, "debug", false, "Enable debug logging to tmp/vmbootstrap-debug.log")
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(smokeCmd)
 
@@ -106,6 +111,12 @@ func main() {
 		} else {
 			fmt.Fprintf(os.Stderr, "%sError:%s %v\n", red, reset, err)
 		}
+		if debugCleanup != nil {
+			debugCleanup()
+		}
 		os.Exit(1)
+	}
+	if debugCleanup != nil {
+		debugCleanup()
 	}
 }

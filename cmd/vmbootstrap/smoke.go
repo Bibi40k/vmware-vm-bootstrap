@@ -125,7 +125,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	}
 
 	// Bootstrap
-	logger := newPrettyLogger(os.Stdout)
+	logger := getLogger()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(45)*time.Minute)
 	defer cancel()
 

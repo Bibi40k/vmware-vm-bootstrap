@@ -35,6 +35,10 @@ func newPrettyLogger(w io.Writer) *slog.Logger {
 	return slog.New(&prettyHandler{out: w, level: slog.LevelInfo})
 }
 
+func newDebugLogger(w io.Writer) *slog.Logger {
+	return slog.New(&prettyHandler{out: w, level: slog.LevelDebug})
+}
+
 func (h *prettyHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= h.level
 }
