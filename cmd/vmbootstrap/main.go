@@ -78,7 +78,7 @@ func init() {
 	rootCmd.AddCommand(smokeCmd)
 
 	smokeCmd.Flags().String("config", "", "Path to VM config file (SOPS encrypted)")
-	smokeCmd.Flags().Bool("cleanup", true, "Delete VM after smoke test")
+	smokeCmd.Flags().Bool("cleanup", false, "Delete VM after smoke test")
 }
 
 func main() {

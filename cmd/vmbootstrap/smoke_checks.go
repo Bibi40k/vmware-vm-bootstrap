@@ -17,9 +17,20 @@ func smokeSSHChecks(user, ip, dataMount string, swapSizeGB int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	// Basic connectivity + hostname
-	if _, err := sshExec(ctx, user, ip, "hostname"); err != nil {
-		return fmt.Errorf("ssh hostname: %w", err)
+	// Basic connectivity + hostname (retry up to ~3 minutes)
+	var lastErr error
+	deadline := time.Now().Add(3 * time.Minute)
+	for time.Now().Before(deadline) {
+		if _, err := sshExec(ctx, user, ip, "hostname"); err == nil {
+			lastErr = nil
+			break
+		} else {
+			lastErr = err
+			time.Sleep(10 * time.Second)
+		}
+	}
+	if lastErr != nil {
+		return fmt.Errorf("ssh hostname: %w", lastErr)
 	}
 
 	// Disk check

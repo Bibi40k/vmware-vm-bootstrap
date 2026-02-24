@@ -860,7 +860,11 @@ func (m *Manager) DeleteFromDatastore(datastoreName, remotePath, vcenterHost, vc
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("govc datastore.rm failed: %w\nOutput: %s", err, string(output))
+		msg := strings.TrimSpace(string(output))
+		if strings.Contains(msg, "was not found") {
+			return nil
+		}
+		return fmt.Errorf("govc datastore.rm failed: %w\nOutput: %s", err, msg)
 	}
 
 	return nil

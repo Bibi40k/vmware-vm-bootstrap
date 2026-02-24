@@ -132,6 +132,9 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		fmt.Println("\033[32m✓ Smoke checks passed\033[0m")
 	}
 
+	if !cleanup {
+		cleanup = readYesNo("Cleanup (delete VM)?", false)
+	}
 	if cleanup {
 		fmt.Println()
 		fmt.Println("Cleanup")
