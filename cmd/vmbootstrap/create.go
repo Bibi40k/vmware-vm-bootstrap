@@ -75,6 +75,8 @@ func bootstrapVM(vmConfigPath string) error {
 
 	v := vmFile.VM
 
+	printConfigWarnings(v.DataDiskSizeGB, v.DataDiskMountPath, v.SwapSizeGB, v.SSHKeyPath, v.SSHKey, v.Password, v.SSHPort)
+
 	// Load SSH key
 	var sshKey string
 	if v.SSHKeyPath != "" {
@@ -227,6 +229,29 @@ func bootstrapVM(vmConfigPath string) error {
 	fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, vm.IPAddress)
 
 	return nil
+}
+
+func printConfigWarnings(dataDiskSizeGB int, dataDiskMountPath string, swapSizeGB int, sshKeyPath, sshKey, password string, sshPort int) {
+	var warnings []string
+	if dataDiskMountPath != "" && dataDiskSizeGB == 0 {
+		warnings = append(warnings, "Data disk mount path is set but data disk size is 0 (no data disk will be created).")
+	}
+	if swapSizeGB == 0 {
+		warnings = append(warnings, "Swap size is 0 (no swap will be created).")
+	}
+	if sshPort != 0 && sshPort != 22 {
+		warnings = append(warnings, fmt.Sprintf("SSH port is %d (default is 22).", sshPort))
+	}
+	if sshKeyPath == "" && sshKey == "" && password == "" {
+		warnings = append(warnings, "No SSH key or password set (SSH access may fail).")
+	}
+	if len(warnings) > 0 {
+		fmt.Println("\033[33m⚠ Configuration warnings:\033[0m")
+		for _, w := range warnings {
+			fmt.Printf("  - %s\n", w)
+		}
+		fmt.Println()
+	}
 }
 
 // offerVMCleanup prompts the user to delete a partially-created VM after Ctrl+C.
