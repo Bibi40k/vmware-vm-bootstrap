@@ -37,6 +37,7 @@ type vmFileConfig struct {
 		DNS2              string `yaml:"dns2"`
 		Datastore         string `yaml:"datastore"`
 		NetworkName       string `yaml:"network_name"`
+		NetworkInterface  string `yaml:"network_interface"`
 		Folder            string `yaml:"folder"`
 		ResourcePool      string `yaml:"resource_pool"`
 		TimeoutMinutes    int    `yaml:"timeout_minutes"`
@@ -108,11 +109,12 @@ func bootstrapVM(vmConfigPath string) error {
 		Password:         v.Password,
 		AllowPasswordSSH: v.AllowPasswordSSH,
 
-		NetworkName: v.NetworkName,
-		IPAddress:   v.IPAddress,
-		Netmask:     v.Netmask,
-		Gateway:     v.Gateway,
-		DNS:         buildDNS(v.DNS, v.DNS2),
+		NetworkName:      v.NetworkName,
+		NetworkInterface: v.NetworkInterface,
+		IPAddress:        v.IPAddress,
+		Netmask:          v.Netmask,
+		Gateway:          v.Gateway,
+		DNS:              buildDNS(v.DNS, v.DNS2),
 
 		Datacenter:   vcCfg.VCenter.Datacenter,
 		Folder:       v.Folder,

@@ -26,11 +26,12 @@ type VMConfig struct {
 	DataDiskMountPath string // Mount point for data disk (e.g., "/data") - required if DataDiskSizeGB set
 
 	// === Network Configuration ===
-	NetworkName string   // Network name (e.g., "LAN_Management")
-	IPAddress   string   // Static IP address (e.g., "192.168.1.10")
-	Netmask     string   // Network mask (e.g., "255.255.255.0")
-	Gateway     string   // Default gateway (e.g., "192.168.1.1")
-	DNS         []string // DNS servers (e.g., ["8.8.8.8", "8.8.4.4"])
+	NetworkName      string   // Network name (e.g., "LAN_Management")
+	NetworkInterface string   // Guest NIC name (e.g., "ens192")
+	IPAddress        string   // Static IP address (e.g., "192.168.1.10")
+	Netmask          string   // Network mask (e.g., "255.255.255.0")
+	Gateway          string   // Default gateway (e.g., "192.168.1.1")
+	DNS              []string // DNS servers (e.g., ["8.8.8.8", "8.8.4.4"])
 
 	// === VM Placement ===
 	Datacenter   string // Datacenter name (e.g., "DC1")
@@ -149,5 +150,8 @@ func (cfg *VMConfig) SetDefaults() {
 	}
 	if cfg.Firmware == "" {
 		cfg.Firmware = d.VM.Firmware
+	}
+	if cfg.NetworkInterface == "" {
+		cfg.NetworkInterface = d.Network.Interface
 	}
 }

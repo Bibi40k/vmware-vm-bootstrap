@@ -16,7 +16,7 @@ autoinstall:
   network:
     version: 2
     ethernets:
-      ens192:
+      {{ .InterfaceName }}:
         dhcp4: false
         addresses:
           - {{ .IPAddress }}/{{ .CIDR }}

@@ -45,6 +45,7 @@ type VMWizardOutput struct {
 		DNS2              string `yaml:"dns2,omitempty"`
 		Datastore         string `yaml:"datastore,omitempty"`
 		NetworkName       string `yaml:"network_name,omitempty"`
+		NetworkInterface  string `yaml:"network_interface,omitempty"`
 		Folder            string `yaml:"folder,omitempty"`
 		ResourcePool      string `yaml:"resource_pool,omitempty"`
 		TimeoutMinutes    int    `yaml:"timeout_minutes"`
@@ -427,6 +428,7 @@ func editVMConfig(path string) error {
 		}
 		v.NetworkName = interactiveSelect(netNames, v.NetworkName, "Network:")
 	}
+	v.NetworkInterface = readLine("Guest NIC name", strOrDefault(v.NetworkInterface, configs.Defaults.Network.Interface))
 	v.IPAddress = readIPLine("IP address", v.IPAddress)
 	v.Netmask = readIPLine("Netmask", strOrDefault(v.Netmask, "255.255.255.0"))
 	v.Gateway = readIPLine("Gateway", v.Gateway)
@@ -751,6 +753,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		out.VM.NetworkName = interactiveSelect(netNames, strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
 	}
 
+	out.VM.NetworkInterface = readLine("Guest NIC name", strOrDefault(out.VM.NetworkInterface, configs.Defaults.Network.Interface))
 	out.VM.IPAddress = readIPLine("IP address", out.VM.IPAddress)
 	out.VM.Netmask = readIPLine("Netmask", strOrDefault(out.VM.Netmask, "255.255.255.0"))
 	out.VM.Gateway = readIPLine("Gateway", strOrDefault(out.VM.Gateway, autoGateway(out.VM.IPAddress)))
@@ -1242,6 +1245,9 @@ func printSummary(out VMWizardOutput) {
 	fmt.Printf("  %-20s %s\n", "Ubuntu:", v.UbuntuVersion)
 	fmt.Printf("  %-20s %s\n", "Datastore:", v.Datastore)
 	fmt.Printf("  %-20s %s\n", "Network:", v.NetworkName)
+	if v.NetworkInterface != "" {
+		fmt.Printf("  %-20s %s\n", "NIC name:", v.NetworkInterface)
+	}
 	if v.Folder != "" {
 		fmt.Printf("  %-20s %s\n", "Folder:", v.Folder)
 	}

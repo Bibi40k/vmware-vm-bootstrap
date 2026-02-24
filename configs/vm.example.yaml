@@ -20,6 +20,7 @@ vm:
   dns2: "1.1.1.1"
   datastore: "SSD01"
   network_name: "LAN"
+  network_interface: "ens192"
   folder: "Production"
   resource_pool: "Resources"
   timeout_minutes: 30

@@ -41,6 +41,7 @@ type UserDataInput struct {
 	Packages         []string // e.g., ["open-vm-tools", "curl"]
 	UserGroups       string   // e.g., "sudo,adm,dialout"
 	UserShell        string   // e.g., "/bin/bash"
+	InterfaceName    string   // Guest NIC name (e.g., "ens192")
 	// Data disk mount point (empty = no data disk, uses layout:lvm)
 	DataDiskMountPath string // e.g., "/data"
 	// Network (required for package installation during autoinstall)
@@ -94,6 +95,11 @@ func NewGenerator() (*Generator, error) {
 
 // GenerateUserData generates autoinstall user-data YAML.
 func (g *Generator) GenerateUserData(input *UserDataInput) (string, error) {
+	// Set default interface name if not provided
+	if input.InterfaceName == "" {
+		input.InterfaceName = configs.Defaults.Network.Interface
+	}
+
 	var buf bytes.Buffer
 	if err := g.autoinstallTmpl.Execute(&buf, input); err != nil {
 		return "", fmt.Errorf("failed to execute autoinstall template: %w", err)

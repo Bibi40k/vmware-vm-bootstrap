@@ -275,6 +275,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		Packages:          configs.Defaults.CloudInit.Packages,
 		UserGroups:        configs.Defaults.CloudInit.UserGroups,
 		UserShell:         configs.Defaults.CloudInit.UserShell,
+		InterfaceName:     cfg.NetworkInterface,
 		DataDiskMountPath: cfg.DataDiskMountPath,
 		IPAddress:         cfg.IPAddress,
 		CIDR:              cidr,
@@ -296,7 +297,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 
 	// Generate network-config
 	networkConfig, err := generator.GenerateNetworkConfig(&cloudinit.NetworkConfigInput{
-		InterfaceName: configs.Defaults.Network.Interface,
+		InterfaceName: cfg.NetworkInterface,
 		IPAddress:     cfg.IPAddress,
 		CIDR:          cidr,
 		Gateway:       cfg.Gateway,
