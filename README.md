@@ -112,6 +112,11 @@ if err := vm.Verify(context.Background()); err != nil {
 
 Note: `Verify` requires VMware Tools running and SSH access. `VCenterHost` accepts a hostname or a full `https://.../sdk` URL (https only).
 
+Security note:
+
+- SSH password authentication is **disabled by default**. To allow it, set `AllowPasswordSSH=true` and provide `Password` or `PasswordHash`.
+- Prefer SSH keys over passwords. Passwords exist in plaintext at runtime (even if stored encrypted at rest).
+
 Auth options (choose one):
 
 - SSH keys:
