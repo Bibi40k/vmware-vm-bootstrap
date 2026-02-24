@@ -224,6 +224,7 @@ VM management (CLI):
 ```bash
 make config   # interactive config wizard
 make run      # bootstrap a VM
+make smoke VM=configs/vm.myvm.sops.yaml  # bootstrap + smoke test (+ cleanup)
 ```
 
 ## Releases
@@ -243,6 +244,8 @@ git push origin v0.1.0
 ## Documentation
 
 See [pkg.go.dev](https://pkg.go.dev/github.com/Bibi40k/vmware-vm-bootstrap) for full API documentation.
+
+Ubuntu support matrix: see [docs/UBUNTU_SUPPORT.md](docs/UBUNTU_SUPPORT.md).
 
 ## Changelog
 

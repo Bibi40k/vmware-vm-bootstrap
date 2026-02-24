@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // sopsDecrypt decrypts a SOPS-encrypted file and returns the plaintext content.
@@ -27,12 +28,20 @@ func sopsEncrypt(path string, plaintext []byte) error {
 		"-e",
 		"--input-type", "yaml",
 		"--output-type", "yaml",
+		"--filename-override", path,
 		"/dev/stdin",
 	)
 	cmd.Stdin = bytes.NewReader(plaintext)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("sops -e (stdin): %s", string(out))
+		msg := strings.TrimSpace(string(out))
+		if strings.Contains(msg, "no matching creation rules found") {
+			return &userError{
+				msg:  "sops config has no matching creation rules",
+				hint: "Edit .sops.yaml (see .sops.yaml.example) so configs/*.sops.yaml matches",
+			}
+		}
+		return fmt.Errorf("sops -e (stdin): %s", msg)
 	}
 
 	if err := os.WriteFile(path, out, 0600); err != nil {

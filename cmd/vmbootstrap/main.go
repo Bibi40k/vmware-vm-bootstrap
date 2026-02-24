@@ -42,10 +42,43 @@ var runCmd = &cobra.Command{
 	},
 }
 
+var smokeCmd = &cobra.Command{
+	Use:           "smoke",
+	Short:         "Bootstrap and run a minimal post-install smoke test",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		vmPath, _ := cmd.Flags().GetString("config")
+		if vmPath == "" {
+			selectedPath, selectedLabel, err := selectVMConfig("\033[1mvmbootstrap\033[0m — Smoke Test", "Select VM config to smoke test:")
+			if err != nil {
+				return err
+			}
+			if selectedPath == "" {
+				return nil
+			}
+			if !readYesNo(fmt.Sprintf("Run smoke test for %s?", selectedLabel), true) {
+				fmt.Println("  Cancelled.")
+				return nil
+			}
+			vmPath = selectedPath
+		}
+		cleanup, _ := cmd.Flags().GetBool("cleanup")
+		return smokeVM(vmPath, cleanup)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
 		"Path to vCenter config file (SOPS encrypted)")
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(smokeCmd)
+
+	smokeCmd.Flags().String("config", "", "Path to VM config file (SOPS encrypted)")
+	smokeCmd.Flags().Bool("cleanup", true, "Delete VM after smoke test")
 }
 
 func main() {

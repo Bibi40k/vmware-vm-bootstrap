@@ -1,4 +1,4 @@
-.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements run config check-go
+.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements run smoke config check-go
 
 # Auto-download Go toolchain if local version < go.mod requirement
 export GOTOOLCHAIN=auto
@@ -34,6 +34,7 @@ help:
 	@printf "\n$(BOLD)  VM Management$(RESET) $(YELLOW)(requires configs/vcenter.sops.yaml)$(RESET)\n"
 	@printf "    $(GREEN)make config$(RESET)        Interactive config manager (create/edit VM configs)\n"
 	@printf "    $(GREEN)make run$(RESET)           Select a VM config and bootstrap it\n"
+	@printf "    $(GREEN)make smoke$(RESET)         Bootstrap + minimal post-install checks + cleanup\n"
 	@printf "\n$(BOLD)  Maintenance$(RESET)\n"
 	@printf "    $(GREEN)make clean$(RESET)         Remove build artifacts and caches\n"
 	@printf "    $(GREEN)make deps$(RESET)          Download + tidy dependencies\n"
@@ -196,6 +197,10 @@ verify: check-go
 # Select a VM config interactively and bootstrap it
 run: build-cli
 	@bin/vmbootstrap run $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),)
+
+# Smoke test (bootstrap + minimal post-install checks + optional cleanup)
+smoke: build-cli
+	@bin/vmbootstrap smoke $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),)
 
 # Interactive config manager (create/edit VM configs)
 config: build-cli

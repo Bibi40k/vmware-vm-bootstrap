@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -166,7 +167,133 @@ func editVCenterConfig(path string) error {
 		return nil
 	}
 
-	if err := saveAndEncrypt(path, cfg); err != nil {
+	if err := saveAndEncrypt(path, cfg, ""); err != nil {
+		return err
+	}
+
+	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", filepath.Base(path))
+	return nil
+}
+
+func createVCenterConfig(path string) error {
+	return createVCenterConfigWithSeed(path, vcenterFileConfig{}, "")
+}
+
+func createVCenterConfigWithDraft(path, draftPath string) error {
+	data, err := os.ReadFile(draftPath)
+	if err != nil {
+		return err
+	}
+	var cfg vcenterFileConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("parse draft: %w", err)
+	}
+	fmt.Printf("\n\033[33m⚠ Resuming draft: %s\033[0m\n", filepath.Base(draftPath))
+	return createVCenterConfigWithSeed(path, cfg, draftPath)
+}
+
+func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath string) error {
+	fmt.Printf("\nCreate: %s\n", filepath.Base(path))
+	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println()
+
+	cfg := seed
+	v := &cfg.VCenter
+
+	stopDraftHandler := startDraftInterruptHandler(path, draftPath, func() ([]byte, bool) {
+		data, err := yaml.Marshal(cfg)
+		if err != nil {
+			return nil, false
+		}
+		if strings.TrimSpace(string(data)) == "vcenter: {}\n" {
+			return nil, false
+		}
+		return data, true
+	})
+	defer stopDraftHandler()
+
+	v.Host = readLine("Host", v.Host)
+	v.Username = readLine("Username", v.Username)
+	if v.Password != "" {
+		if readYesNo("Use saved password?", true) {
+			// keep existing
+		} else {
+			v.Password = readPassword("Password")
+		}
+	} else {
+		v.Password = readPassword("Password")
+	}
+	v.Datacenter = readLine("Datacenter", v.Datacenter)
+	v.Port = readInt("Port", intOrDefault(v.Port, configs.Defaults.VCenter.Port), 1, 65535)
+	v.Insecure = readYesNo("Skip TLS verification? (not recommended)", v.Insecure)
+
+	// Try to connect and fetch resource pickers.
+	fmt.Print("  Connecting to vCenter... ")
+	type vcCatalog struct {
+		datastores []vcenter.DatastoreInfo
+		networks   []vcenter.NetworkInfo
+		folders    []vcenter.FolderInfo
+		pools      []vcenter.ResourcePoolInfo
+	}
+	cat, catErr := func() (*vcCatalog, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
+			Host:     v.Host,
+			Username: v.Username,
+			Password: v.Password,
+			Port:     v.Port,
+			Insecure: v.Insecure,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			_ = vclient.Disconnect()
+		}()
+		ds, _ := vclient.ListDatastores(v.Datacenter)
+		nets, _ := vclient.ListNetworks(v.Datacenter)
+		fl, _ := vclient.ListFolders(v.Datacenter)
+		pl, _ := vclient.ListResourcePools(v.Datacenter)
+		return &vcCatalog{datastores: ds, networks: nets, folders: fl, pools: pl}, nil
+	}()
+	if catErr != nil {
+		fmt.Printf("\033[33m⚠ %v\033[0m (will use manual input)\n", catErr)
+	} else {
+		fmt.Printf("\033[32m✓\033[0m  (%d datastores, %d networks, %d folders, %d pools)\n",
+			len(cat.datastores), len(cat.networks), len(cat.folders), len(cat.pools))
+	}
+	fmt.Println()
+
+	if catErr != nil {
+		v.ISODatastore = readLine("ISO datastore (where Ubuntu + seed ISOs are stored)", v.ISODatastore)
+		v.Folder = readLine("Default VM folder", v.Folder)
+		v.ResourcePool = readLine("Default resource pool", v.ResourcePool)
+		v.Network = readLine("Default network", v.Network)
+	} else {
+		fmt.Println("  ISO datastore (where Ubuntu + seed ISOs are stored):")
+		v.ISODatastore = selectISODatastore(cat.datastores, v.ISODatastore)
+		v.Folder = selectFolder(cat.folders, v.Folder, "Default VM folder:")
+		v.ResourcePool = selectResourcePool(cat.pools, v.ResourcePool, "Default resource pool:")
+		if len(cat.networks) > 0 {
+			var netNames []string
+			for _, n := range cat.networks {
+				parts := strings.Split(n.Name, "/")
+				netNames = append(netNames, parts[len(parts)-1])
+			}
+			v.Network = interactiveSelect(netNames, v.Network, "Default network:")
+		} else {
+			v.Network = readLine("Default network", v.Network)
+		}
+	}
+
+	fmt.Println()
+	if !readYesNo("Save and encrypt?", true) {
+		fmt.Println("  Cancelled — no changes saved.")
+		return nil
+	}
+
+	if err := saveAndEncrypt(path, cfg, draftPath); err != nil {
 		return err
 	}
 
@@ -328,7 +455,7 @@ func editVMConfig(path string) error {
 		return nil
 	}
 
-	if err := saveAndEncrypt(path, cfg); err != nil {
+	if err := saveAndEncrypt(path, cfg, ""); err != nil {
 		return err
 	}
 
@@ -338,7 +465,7 @@ func editVMConfig(path string) error {
 
 // saveAndEncrypt marshals v to YAML, writes to path, and encrypts in-place with SOPS.
 // If the file already exists, it is backed up and restored on failure.
-func saveAndEncrypt(path string, v interface{}) error {
+func saveAndEncrypt(path string, v interface{}, draftPath string) error {
 	backup, backupExisted := func() ([]byte, bool) {
 		data, err := os.ReadFile(path)
 		return data, err == nil
@@ -350,6 +477,21 @@ func saveAndEncrypt(path string, v interface{}) error {
 	}
 
 	if err := sopsEncrypt(path, plaintext); err != nil {
+		pathOverride := draftPath
+		if pathOverride != "" {
+			_ = os.MkdirAll("tmp", 0700)
+			_ = os.WriteFile(pathOverride, plaintext, 0600)
+		}
+		dp := pathOverride
+		if dp == "" {
+			dp, _ = writeDraft(path, plaintext)
+		}
+		if dp != "" {
+			return &userError{
+				msg:  err.Error(),
+				hint: fmt.Sprintf("Progress saved (plaintext): %s (delete after use)", dp),
+			}
+		}
 		if backupExisted {
 			if restoreErr := os.WriteFile(path, backup, 0600); restoreErr != nil {
 				return fmt.Errorf("encrypt failed (%v) and restore failed: %w", err, restoreErr)
@@ -361,26 +503,119 @@ func saveAndEncrypt(path string, v interface{}) error {
 		}
 		return err
 	}
+	if err := cleanupDrafts(path); err != nil {
+		return fmt.Errorf("cleanup drafts: %w", err)
+	}
 	return nil
+}
+
+func writeDraft(targetPath string, plaintext []byte) (string, error) {
+	if err := os.MkdirAll("tmp", 0700); err != nil {
+		return "", err
+	}
+	base := filepath.Base(targetPath)
+	ts := time.Now().Format("20060102-150405")
+	draftPath := filepath.Join("tmp", fmt.Sprintf("%s.draft.%s.yaml", base, ts))
+	if err := os.WriteFile(draftPath, plaintext, 0600); err != nil {
+		return "", err
+	}
+	return draftPath, nil
+}
+
+func cleanupDrafts(targetPath string) error {
+	base := filepath.Base(targetPath)
+	pattern := filepath.Join("tmp", fmt.Sprintf("%s.draft.*.yaml", base))
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return err
+	}
+	for _, p := range matches {
+		if rmErr := os.Remove(p); rmErr != nil && !os.IsNotExist(rmErr) {
+			return rmErr
+		}
+	}
+	return nil
+}
+
+// startDraftInterruptHandler saves plaintext drafts on Ctrl+C and asks whether to keep them.
+func startDraftInterruptHandler(targetPath, draftPath string, dataFn func() ([]byte, bool)) func() {
+	localSigCh := make(chan os.Signal, 1)
+	signal.Stop(mainSigCh)
+	signal.Notify(localSigCh, os.Interrupt)
+	go func() {
+		<-localSigCh
+		if data, ok := dataFn(); ok {
+			path := draftPath
+			if path == "" {
+				path, _ = writeDraft(targetPath, data)
+			} else {
+				_ = os.MkdirAll("tmp", 0700)
+				_ = os.WriteFile(path, data, 0600)
+			}
+			if path != "" {
+				fmt.Printf("\n\033[33m⚠ Interrupted\033[0m\n")
+				fmt.Printf("  Draft saved (plaintext): %s (delete after use)\n", path)
+			}
+		}
+		fmt.Println("\nCancelled.")
+		os.Exit(0)
+	}()
+	return func() {
+		signal.Stop(localSigCh)
+		signal.Notify(mainSigCh, os.Interrupt)
+	}
 }
 
 // ─── Create new VM wizard ─────────────────────────────────────────────────────
 
 func runCreateWizard() error {
+	return runCreateWizardWithSeed("", "")
+}
+
+func runCreateWizardWithDraft(outputFile, draftPath string) error {
+	data, err := os.ReadFile(draftPath)
+	if err != nil {
+		return err
+	}
+	var out VMWizardOutput
+	if err := yaml.Unmarshal(data, &out); err != nil {
+		return fmt.Errorf("parse draft: %w", err)
+	}
+	fmt.Printf("\n\033[33m⚠ Resuming draft: %s\033[0m\n", filepath.Base(draftPath))
+	return runCreateWizardWithSeed(outputFile, draftPath)
+}
+
+func runCreateWizardWithSeed(outputFile, draftPath string) error {
+	if _, err := os.Stat(vcenterConfigFile); os.IsNotExist(err) {
+		return &userError{
+			msg:  "vCenter config not found",
+			hint: "Run: make config → Create vcenter.sops.yaml",
+		}
+	}
 	fmt.Printf("\n\033[1mCreate new VM\033[0m\n")
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
 
-	// Config file slug
-	var slug string
-	for {
-		slug = strings.TrimSpace(readLine("Config name (e.g. 'vm1' → configs/vm.vm1.sops.yaml)", ""))
-		if slug != "" {
-			break
+	var out VMWizardOutput
+	if draftPath != "" {
+		data, err := os.ReadFile(draftPath)
+		if err == nil {
+			_ = yaml.Unmarshal(data, &out)
 		}
-		fmt.Println("  Config name is required")
 	}
-	outputFile := fmt.Sprintf("configs/vm.%s.sops.yaml", slug)
+
+	if outputFile == "" {
+		// Config file slug
+		var slug string
+		for {
+			slug = strings.TrimSpace(readLine("Config name (e.g. 'vm1' → configs/vm.vm1.sops.yaml)", ""))
+			if slug != "" {
+				break
+			}
+			fmt.Println("  Config name is required")
+		}
+		outputFile = fmt.Sprintf("configs/vm.%s.sops.yaml", slug)
+	}
 
 	if _, err := os.Stat(outputFile); err == nil {
 		if !readYesNo(fmt.Sprintf("%s already exists. Overwrite?", outputFile), false) {
@@ -388,6 +623,15 @@ func runCreateWizard() error {
 			return nil
 		}
 	}
+
+	stopDraftHandler := startDraftInterruptHandler(outputFile, draftPath, func() ([]byte, bool) {
+		data, err := yaml.Marshal(out)
+		if err != nil {
+			return nil, false
+		}
+		return data, true
+	})
+	defer stopDraftHandler()
 
 	// Connect to vCenter and fetch all resources upfront (before wizard questions).
 	// This avoids context deadline issues caused by the user taking time to answer prompts.
@@ -420,25 +664,33 @@ func runCreateWizard() error {
 	fmt.Println("\033[32m✓\033[0m")
 	fmt.Println()
 
-	out := VMWizardOutput{}
-
-	vmName := readLine("VM name in vCenter", slug)
+	if out.VM.Name == "" {
+		out.VM.Name = strings.TrimSuffix(filepath.Base(outputFile), ".sops.yaml")
+		out.VM.Name = strings.TrimPrefix(out.VM.Name, "vm.")
+	}
+	vmName := readLine("VM name in vCenter", out.VM.Name)
 	out.VM.Name = vmName
 
 	// === [1] VM Specs ===
 	fmt.Println()
 	fmt.Println("[1/5] VM Specs")
 
-	out.VM.CPUs = readInt("CPU cores", 4, 1, 64)
-	ramGB := readInt("RAM (GB)", 16, 1, 512)
-	out.VM.MemoryMB = ramGB * 1024
-	out.VM.DiskSizeGB = readInt("OS disk (GB)", 50, 10, 2000)
-
-	if readYesNo("Add separate data disk?", false) {
-		out.VM.DataDiskSizeGB = readInt("Data disk (GB)", 500, 10, 2000)
-		out.VM.DataDiskMountPath = readLine("Mount point", "/data")
+	defaultCPU := intOrDefault(out.VM.CPUs, 4)
+	out.VM.CPUs = readInt("CPU cores", defaultCPU, 1, 64)
+	defaultRAM := 16
+	if out.VM.MemoryMB > 0 {
+		defaultRAM = out.VM.MemoryMB / 1024
 	}
-	out.VM.SwapSizeGB = readInt("Swap size (GB, 0 = no swap)", configs.Defaults.CloudInit.SwapSizeGB, 0, 64)
+	ramGB := readInt("RAM (GB)", defaultRAM, 1, 512)
+	out.VM.MemoryMB = ramGB * 1024
+	out.VM.DiskSizeGB = readInt("OS disk (GB)", intOrDefault(out.VM.DiskSizeGB, 50), 10, 2000)
+
+	if readYesNo("Add separate data disk?", out.VM.DataDiskSizeGB > 0) {
+		defaultData := intOrDefault(out.VM.DataDiskSizeGB, 500)
+		out.VM.DataDiskSizeGB = readInt("Data disk (GB)", defaultData, 10, 2000)
+		out.VM.DataDiskMountPath = readLine("Mount point", strOrDefault(out.VM.DataDiskMountPath, "/data"))
+	}
+	out.VM.SwapSizeGB = readInt("Swap size (GB, 0 = no swap)", intOrDefault(out.VM.SwapSizeGB, configs.Defaults.CloudInit.SwapSizeGB), 0, 64)
 	fmt.Println()
 
 	// === [2] OS Version ===
@@ -452,23 +704,23 @@ func runCreateWizard() error {
 	// === [3] Placement & Storage ===
 	fmt.Println("[3/5] Placement & Storage")
 	if folderErr != nil {
-		out.VM.Folder = readLine("VM folder", vcCfg.VCenter.Folder)
+		out.VM.Folder = readLine("VM folder", strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder))
 	} else {
-		out.VM.Folder = selectFolder(folders, vcCfg.VCenter.Folder, "VM folder:")
+		out.VM.Folder = selectFolder(folders, strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder), "VM folder:")
 	}
 	if poolErr != nil {
-		out.VM.ResourcePool = readLine("Resource pool", vcCfg.VCenter.ResourcePool)
+		out.VM.ResourcePool = readLine("Resource pool", strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool))
 	} else {
-		out.VM.ResourcePool = selectResourcePool(pools, vcCfg.VCenter.ResourcePool, "Resource pool:")
+		out.VM.ResourcePool = selectResourcePool(pools, strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool), "Resource pool:")
 	}
 	fmt.Println()
 
 	requiredGB := float64(out.VM.DiskSizeGB + out.VM.DataDiskSizeGB)
 	if dsErr != nil {
 		fmt.Printf("  ⚠ Could not list datastores: %v\n", dsErr)
-		out.VM.Datastore = readLine("Datastore", "")
+		out.VM.Datastore = readLine("Datastore", out.VM.Datastore)
 	} else {
-		out.VM.Datastore = selectDatastore(datastores, requiredGB, "")
+		out.VM.Datastore = selectDatastore(datastores, requiredGB, out.VM.Datastore)
 	}
 	fmt.Println()
 
@@ -478,28 +730,28 @@ func runCreateWizard() error {
 		if netErr != nil {
 			fmt.Printf("  ⚠ Could not list networks: %v\n", netErr)
 		}
-		out.VM.NetworkName = readLine("Network name", vcCfg.VCenter.Network)
+		out.VM.NetworkName = readLine("Network name", strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network))
 	} else {
 		var netNames []string
 		for _, n := range networks {
 			parts := strings.Split(n.Name, "/")
 			netNames = append(netNames, parts[len(parts)-1])
 		}
-		out.VM.NetworkName = interactiveSelect(netNames, vcCfg.VCenter.Network, "Network:")
+		out.VM.NetworkName = interactiveSelect(netNames, strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
 	}
 
-	out.VM.IPAddress = readIPLine("IP address", "")
-	out.VM.Netmask = readIPLine("Netmask", "255.255.255.0")
-	out.VM.Gateway = readIPLine("Gateway", autoGateway(out.VM.IPAddress))
-	out.VM.DNS = readLine("DNS", autoFirstDNS(out.VM.Gateway))
-	out.VM.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", "")
+	out.VM.IPAddress = readIPLine("IP address", out.VM.IPAddress)
+	out.VM.Netmask = readIPLine("Netmask", strOrDefault(out.VM.Netmask, "255.255.255.0"))
+	out.VM.Gateway = readIPLine("Gateway", strOrDefault(out.VM.Gateway, autoGateway(out.VM.IPAddress)))
+	out.VM.DNS = readLine("DNS", strOrDefault(out.VM.DNS, autoFirstDNS(out.VM.Gateway)))
+	out.VM.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", out.VM.DNS2)
 	fmt.Println()
 
 	// === [5] User & SSH ===
 	fmt.Println("[5/5] User & SSH")
 
-	out.VM.Username = readLine("Username", "sysadmin")
-	out.VM.SSHKeyPath = readFilePath("SSH public key file", os.ExpandEnv("$HOME/.ssh/id_ed25519.pub"))
+	out.VM.Username = readLine("Username", strOrDefault(out.VM.Username, "sysadmin"))
+	out.VM.SSHKeyPath = readFilePath("SSH public key file", strOrDefault(out.VM.SSHKeyPath, os.ExpandEnv("$HOME/.ssh/id_ed25519.pub")))
 
 	if readYesNo("Set password?", true) {
 		out.VM.Password = readPassword("Password")
@@ -520,7 +772,7 @@ func runCreateWizard() error {
 		return nil
 	}
 
-	if err := saveAndEncrypt(outputFile, out); err != nil {
+	if err := saveAndEncrypt(outputFile, out, draftPath); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -937,9 +1189,6 @@ func buildUbuntuOptions() []string {
 		"24.04": "24.04 LTS (Noble)",
 		"22.04": "22.04 LTS (Jammy)",
 		"20.04": "20.04 LTS (Focal)",
-		"18.04": "18.04 LTS (Bionic)",
-		"16.04": "16.04 LTS (Xenial)",
-		"14.04": "14.04 LTS (Trusty)",
 	}
 	var out []string
 	for _, v := range vers {
