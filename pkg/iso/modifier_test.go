@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 )
 
 func TestModifyGRUBFile_AddsDefaultTimeoutAndAutoinstall(t *testing.T) {
@@ -73,6 +76,35 @@ menuentry "Install" {
 	}
 	if !strings.Contains(s, "set default=0") {
 		t.Errorf("expected set default=0 to replace existing default")
+	}
+}
+
+func TestModifyGRUBFile_AddsAutoinstallToIsolinuxAppend(t *testing.T) {
+	m := NewManager(context.Background())
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "txt.cfg")
+
+	original := `default live
+label live
+  menu label ^Install Ubuntu Server
+  kernel /casper/vmlinuz
+  append   initrd=/casper/initrd quiet  ---
+`
+	if err := os.WriteFile(cfg, []byte(original), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := m.modifyGRUBFile(cfg); err != nil {
+		t.Fatalf("modifyGRUBFile: %v", err)
+	}
+
+	updated, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	s := string(updated)
+	if !strings.Contains(s, "append") || !strings.Contains(s, "autoinstall ds=nocloud ---") {
+		t.Errorf("expected autoinstall on append line, got:\n%s", s)
 	}
 }
 
@@ -157,5 +189,47 @@ func TestCleanupExtractDir(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("expected dir to be removed, err=%v", err)
+	}
+}
+
+func TestModifyUbuntuISO_UsesCachedWhenMetaMatches(t *testing.T) {
+	m := NewManager(context.Background())
+	tmp := t.TempDir()
+
+	orig := filepath.Join(tmp, "ubuntu-20.04.iso")
+	if err := os.WriteFile(orig, []byte("iso"), 0644); err != nil {
+		t.Fatalf("write orig: %v", err)
+	}
+	if err := os.Chtimes(orig, time.Now(), time.Unix(1700000000, 0)); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	info, err := os.Stat(orig)
+	if err != nil {
+		t.Fatalf("stat orig: %v", err)
+	}
+
+	modified := filepath.Join(tmp, "ubuntu-20.04"+configs.Defaults.ISO.UbuntuModifiedSuffix+".iso")
+	if err := os.WriteFile(modified, []byte("cached"), 0644); err != nil {
+		t.Fatalf("write modified: %v", err)
+	}
+	metaPath := modified + ".meta.json"
+	if err := writeISOMeta(metaPath, isoMeta{
+		Version:       isoModifierVersion,
+		SourcePath:    orig,
+		SourceSize:    info.Size(),
+		SourceModTime: info.ModTime().Unix(),
+	}); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	got, created, err := m.ModifyUbuntuISO(orig)
+	if err != nil {
+		t.Fatalf("ModifyUbuntuISO: %v", err)
+	}
+	if created {
+		t.Fatalf("expected cached ISO, got created=true")
+	}
+	if got != modified {
+		t.Fatalf("expected %s, got %s", modified, got)
 	}
 }
