@@ -9,24 +9,30 @@ import (
 	"time"
 )
 
-func smokeSSHChecks(user, ip, dataMount string, swapSizeGB int) error {
+func smokeSSHChecks(user, ip, keyPath string, sshPort int, dataMount string, swapSizeGB int) error {
 	if ip == "" {
 		return fmt.Errorf("missing VM IP")
 	}
+	if sshPort == 0 {
+		sshPort = 22
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
 	defer cancel()
 
-	// Basic connectivity + hostname (retry up to ~3 minutes)
+	// Basic connectivity + hostname (retry up to ~6 minutes)
 	var lastErr error
-	deadline := time.Now().Add(3 * time.Minute)
+	attempt := 0
+	deadline := time.Now().Add(6 * time.Minute)
 	for time.Now().Before(deadline) {
-		if _, err := sshExec(ctx, user, ip, "hostname"); err == nil {
+		attempt++
+		if _, err := sshExecAuto(ctx, user, ip, sshPort, keyPath, "hostname"); err == nil {
 			lastErr = nil
 			break
 		} else {
 			lastErr = err
-			time.Sleep(10 * time.Second)
+			fmt.Printf("  SSH not ready (attempt %d), retrying in 15s...\n", attempt)
+			time.Sleep(15 * time.Second)
 		}
 	}
 	if lastErr != nil {
@@ -35,7 +41,7 @@ func smokeSSHChecks(user, ip, dataMount string, swapSizeGB int) error {
 
 	// Disk check
 	if dataMount != "" {
-		out, err := sshExec(ctx, user, ip, "lsblk -o NAME,MOUNTPOINT -n")
+		out, err := sshExecAuto(ctx, user, ip, sshPort, keyPath, "lsblk -o NAME,MOUNTPOINT -n")
 		if err != nil {
 			return fmt.Errorf("lsblk: %w", err)
 		}
@@ -46,7 +52,7 @@ func smokeSSHChecks(user, ip, dataMount string, swapSizeGB int) error {
 
 	// Swap check
 	if swapSizeGB > 0 {
-		out, err := sshExec(ctx, user, ip, "swapon --show --noheadings")
+		out, err := sshExecAuto(ctx, user, ip, sshPort, keyPath, "swapon --show --noheadings")
 		if err != nil {
 			return fmt.Errorf("swapon: %w", err)
 		}
@@ -56,18 +62,37 @@ func smokeSSHChecks(user, ip, dataMount string, swapSizeGB int) error {
 	}
 
 	// VMware Tools
-	if _, err := sshExec(ctx, user, ip, "systemctl is-active open-vm-tools"); err != nil {
+	if _, err := sshExecAuto(ctx, user, ip, sshPort, keyPath, "systemctl is-active open-vm-tools"); err != nil {
 		return fmt.Errorf("open-vm-tools not active: %w", err)
 	}
 
 	return nil
 }
 
-func sshExec(ctx context.Context, user, ip, cmd string) (string, error) {
+func sshExecAuto(ctx context.Context, user, ip string, sshPort int, keyPath, cmd string) (string, error) {
+	// Try explicit key first (if provided), then fallback to default SSH config/agent.
+	if keyPath != "" {
+		if out, err := sshExecWithKey(ctx, user, ip, sshPort, keyPath, cmd); err == nil {
+			return out, nil
+		} else if isAuthError(err) || isKeyError(err) {
+			// Fall back to default SSH (agent/config) on auth/key mismatch.
+			return sshExecDefault(ctx, user, ip, sshPort, cmd)
+		} else {
+			return "", err
+		}
+	}
+	return sshExecDefault(ctx, user, ip, sshPort, cmd)
+}
+
+func sshExecWithKey(ctx context.Context, user, ip string, sshPort int, keyPath, cmd string) (string, error) {
 	sshCmd := exec.CommandContext(ctx, "ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "ConnectTimeout=10",
+		"-o", "BatchMode=yes",
+		"-o", "IdentitiesOnly=yes",
+		"-p", fmt.Sprintf("%d", sshPort),
+		"-i", keyPath,
 		fmt.Sprintf("%s@%s", user, ip),
 		cmd,
 	)
@@ -79,4 +104,36 @@ func sshExec(ctx context.Context, user, ip, cmd string) (string, error) {
 		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.TrimSpace(out.String()), nil
+}
+
+func sshExecDefault(ctx context.Context, user, ip string, sshPort int, cmd string) (string, error) {
+	sshCmd := exec.CommandContext(ctx, "ssh",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ConnectTimeout=10",
+		"-o", "BatchMode=yes",
+		"-p", fmt.Sprintf("%d", sshPort),
+		fmt.Sprintf("%s@%s", user, ip),
+		cmd,
+	)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	sshCmd.Stdout = &out
+	sshCmd.Stderr = &stderr
+	if err := sshCmd.Run(); err != nil {
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
+func isAuthError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "Permission denied") || strings.Contains(msg, "Authentication failed")
+}
+
+func isKeyError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "No such file or directory") ||
+		strings.Contains(msg, "invalid format") ||
+		strings.Contains(msg, "Identity file")
 }

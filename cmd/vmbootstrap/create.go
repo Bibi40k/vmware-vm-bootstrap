@@ -28,6 +28,7 @@ type vmFileConfig struct {
 		SSHKeyPath        string `yaml:"ssh_key_path"`
 		SSHKey            string `yaml:"ssh_key"`
 		Password          string `yaml:"password"`
+		SSHPort           int    `yaml:"ssh_port"`
 		AllowPasswordSSH  bool   `yaml:"allow_password_ssh"`
 		IPAddress         string `yaml:"ip_address"`
 		Netmask           string `yaml:"netmask"`
@@ -116,6 +117,43 @@ func bootstrapVM(vmConfigPath string) error {
 		ResourcePool: v.ResourcePool,
 		Datastore:    v.Datastore,
 		ISODatastore: vcCfg.VCenter.ISODatastore,
+	}
+
+	// If VM already exists, warn and offer options.
+	if exists, err := vmExists(cfg); err == nil && exists {
+		keyPath, cleanupKey, keyErr := prepareSSHKeyPath(v.SSHKeyPath, sshKey)
+		if keyErr == nil {
+			if cleanupKey != nil {
+				defer cleanupKey()
+			}
+			if currentVer, err := detectUbuntuVersion(cfg.Username, cfg.IPAddress, keyPath, v.SSHPort); err == nil {
+				if cfg.UbuntuVersion != "" && currentVer != "" && currentVer != cfg.UbuntuVersion {
+					fmt.Printf("\n\033[33m⚠ OS version mismatch: VM=%s, config=%s\033[0m\n", currentVer, cfg.UbuntuVersion)
+					fmt.Println("  Recommended: delete and recreate VM for version changes.")
+				}
+			}
+		}
+		fmt.Printf("\n\033[33m⚠ VM already exists: %s\033[0m\n", cfg.Name)
+		choice := interactiveSelect(
+			[]string{
+				"Cancel",
+				"Delete existing VM and recreate",
+			},
+			"Cancel",
+			"Select action:",
+		)
+		fmt.Println()
+		if choice == "Cancel" {
+			fmt.Println("  Cancelled.")
+			return nil
+		}
+		if !readYesNo("Delete existing VM now?", true) {
+			fmt.Println("  Cancelled.")
+			return nil
+		}
+		if err := cleanupVM(cfg, cfg.Name); err != nil {
+			return err
+		}
 	}
 
 	if v.DataDiskSizeGB > 0 {

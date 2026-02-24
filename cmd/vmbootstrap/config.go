@@ -30,13 +30,14 @@ type VMWizardOutput struct {
 		DiskSizeGB        int    `yaml:"disk_size_gb"`
 		DataDiskSizeGB    int    `yaml:"data_disk_size_gb,omitempty"`
 		DataDiskMountPath string `yaml:"data_disk_mount_path,omitempty"`
-		SwapSizeGB        int    `yaml:"swap_size_gb,omitempty"`
+		SwapSizeGB        *int   `yaml:"swap_size_gb,omitempty"`
 		UbuntuVersion     string `yaml:"ubuntu_version"`
 		Username          string `yaml:"username"`
 		SSHKeyPath        string `yaml:"ssh_key_path,omitempty"`
 		SSHKey            string `yaml:"ssh_key,omitempty"`
 		Password          string `yaml:"password,omitempty"`
 		AllowPasswordSSH  bool   `yaml:"allow_password_ssh,omitempty"`
+		SSHPort           int    `yaml:"ssh_port,omitempty"`
 		IPAddress         string `yaml:"ip_address"`
 		Netmask           string `yaml:"netmask"`
 		Gateway           string `yaml:"gateway"`
@@ -369,8 +370,12 @@ func editVMConfig(path string) error {
 		v.DataDiskSizeGB = readInt("Data disk (GB)", 500, 10, 2000)
 		v.DataDiskMountPath = readLine("Mount point", "/data")
 	}
-	defaultSwap := intOrDefault(v.SwapSizeGB, configs.Defaults.CloudInit.SwapSizeGB)
-	v.SwapSizeGB = readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
+	defaultSwap := configs.Defaults.CloudInit.SwapSizeGB
+	if v.SwapSizeGB != nil {
+		defaultSwap = *v.SwapSizeGB
+	}
+	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
+	v.SwapSizeGB = &swap
 	fmt.Println()
 
 	// === [2] OS Version ===
@@ -433,6 +438,7 @@ func editVMConfig(path string) error {
 	fmt.Println("[5/5] User & SSH")
 	v.Username = readLine("Username", strOrDefault(v.Username, "sysadmin"))
 	v.SSHKeyPath = readFilePath("SSH public key file", v.SSHKeyPath)
+	v.SSHPort = readInt("SSH port", intOrDefault(v.SSHPort, 22), 1, 65535)
 	pwStatus := "not set"
 	if v.Password != "" {
 		pwStatus = "set"
@@ -690,7 +696,12 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		out.VM.DataDiskSizeGB = readInt("Data disk (GB)", defaultData, 10, 2000)
 		out.VM.DataDiskMountPath = readLine("Mount point", strOrDefault(out.VM.DataDiskMountPath, "/data"))
 	}
-	out.VM.SwapSizeGB = readInt("Swap size (GB, 0 = no swap)", intOrDefault(out.VM.SwapSizeGB, configs.Defaults.CloudInit.SwapSizeGB), 0, 64)
+	defaultSwap := configs.Defaults.CloudInit.SwapSizeGB
+	if out.VM.SwapSizeGB != nil {
+		defaultSwap = *out.VM.SwapSizeGB
+	}
+	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
+	out.VM.SwapSizeGB = &swap
 	fmt.Println()
 
 	// === [2] OS Version ===
@@ -752,6 +763,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 
 	out.VM.Username = readLine("Username", strOrDefault(out.VM.Username, "sysadmin"))
 	out.VM.SSHKeyPath = readFilePath("SSH public key file", strOrDefault(out.VM.SSHKeyPath, os.ExpandEnv("$HOME/.ssh/id_ed25519.pub")))
+	out.VM.SSHPort = readInt("SSH port", intOrDefault(out.VM.SSHPort, 22), 1, 65535)
 
 	if readYesNo("Set password?", true) {
 		out.VM.Password = readPassword("Password")
@@ -1224,6 +1236,9 @@ func printSummary(out VMWizardOutput) {
 		fmt.Printf("  Data: %d GB", v.DataDiskSizeGB)
 	}
 	fmt.Println()
+	if v.SwapSizeGB != nil {
+		fmt.Printf("  %-20s %d GB\n", "Swap:", *v.SwapSizeGB)
+	}
 	fmt.Printf("  %-20s %s\n", "Ubuntu:", v.UbuntuVersion)
 	fmt.Printf("  %-20s %s\n", "Datastore:", v.Datastore)
 	fmt.Printf("  %-20s %s\n", "Network:", v.NetworkName)
@@ -1241,6 +1256,9 @@ func printSummary(out VMWizardOutput) {
 	fmt.Printf("  %-20s %s\n", "User:", v.Username)
 	if v.SSHKeyPath != "" {
 		fmt.Printf("  %-20s %s\n", "SSH key:", v.SSHKeyPath)
+	}
+	if v.SSHPort > 0 {
+		fmt.Printf("  %-20s %d\n", "SSH port:", v.SSHPort)
 	}
 	if v.Password != "" {
 		fmt.Printf("  %-20s (set)\n", "Password:")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,6 +43,13 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	sshKey, err := loadSSHKey(v.SSHKeyPath, v.SSHKey)
 	if err != nil {
 		return err
+	}
+	sshKeyPath, cleanupKey, err := prepareSSHKeyPath(v.SSHKeyPath, sshKey)
+	if err != nil {
+		return err
+	}
+	if cleanupKey != nil {
+		defer cleanupKey()
 	}
 
 	cfg := &bootstrap.VMConfig{
@@ -84,6 +92,36 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	if v.SwapSizeGB > 0 {
 		size := v.SwapSizeGB
 		cfg.SwapSizeGB = &size
+	}
+
+	// If VM already exists, ask whether to reuse or recreate.
+	if exists, err := vmExists(cfg); err == nil && exists {
+		fmt.Printf("\n\033[33m⚠ VM already exists: %s\033[0m\n", cfg.Name)
+		choice := interactiveSelect(
+			[]string{
+				"Reuse existing VM",
+				"Create new VM (delete existing)",
+				"Cancel",
+			},
+			"Reuse existing VM",
+			"Select action:",
+		)
+		fmt.Println()
+		switch choice {
+		case "Reuse existing VM":
+			return runSmokeChecksOnly(cfg, v.DataDiskMountPath, v.SwapSizeGB, sshKeyPath, v.SSHPort, cleanup, 0)
+		case "Create new VM (delete existing)":
+			if !readYesNo("Delete existing VM before creating new?", true) {
+				fmt.Println("  Cancelled.")
+				return nil
+			}
+			if err := cleanupVM(cfg, cfg.Name); err != nil {
+				return err
+			}
+		default:
+			fmt.Println("  Cancelled.")
+			return nil
+		}
 	}
 
 	// Bootstrap
@@ -147,24 +185,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	fmt.Printf("  IP:        %s\n", vm.IPAddress)
 	fmt.Printf("  SSH ready: %v\n", vm.SSHReady)
 
-	// Minimal post-checks via SSH
-	if err := smokeSSHChecks(cfg.Username, vm.IPAddress, v.DataDiskMountPath, v.SwapSizeGB); err != nil {
-		fmt.Printf("\033[31m✗ Smoke checks failed: %v\033[0m\n", err)
-	} else {
-		fmt.Println("\033[32m✓ Smoke checks passed\033[0m")
-	}
-
-	if !cleanup {
-		cleanup = readYesNo("Cleanup (delete VM)?", false)
-	}
-	if cleanup {
-		fmt.Println()
-		fmt.Println("Cleanup")
-		return cleanupVM(cfg, vm.Name)
-	}
-
-	fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, vm.IPAddress)
-	return nil
+	return runSmokeChecksOnly(cfg, v.DataDiskMountPath, v.SwapSizeGB, sshKeyPath, v.SSHPort, cleanup, 60)
 }
 
 func loadSSHKey(path, raw string) (string, error) {
@@ -179,6 +200,31 @@ func loadSSHKey(path, raw string) (string, error) {
 		return "", fmt.Errorf("either vm.ssh_key or vm.ssh_key_path is required")
 	}
 	return raw, nil
+}
+
+func prepareSSHKeyPath(path, raw string) (string, func(), error) {
+	if path != "" {
+		// If a public key is provided, try matching private key next to it.
+		if strings.HasSuffix(path, ".pub") {
+			priv := strings.TrimSuffix(path, ".pub")
+			if _, err := os.Stat(priv); err == nil {
+				return priv, nil, nil
+			}
+		}
+		return path, nil, nil
+	}
+	if raw == "" {
+		return "", nil, fmt.Errorf("missing SSH key")
+	}
+	if err := os.MkdirAll("tmp", 0700); err != nil {
+		return "", nil, err
+	}
+	tmpPath := filepath.Join("tmp", fmt.Sprintf("smoke-ssh-key-%d", time.Now().UnixNano()))
+	if err := os.WriteFile(tmpPath, []byte(raw+"\n"), 0600); err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { _ = os.Remove(tmpPath) }
+	return tmpPath, cleanup, nil
 }
 
 func cleanupVM(cfg *bootstrap.VMConfig, name string) error {
@@ -223,5 +269,52 @@ func cleanupVM(cfg *bootstrap.VMConfig, name string) error {
 		return fmt.Errorf("destroy wait: %w", err)
 	}
 	fmt.Println("\033[32m✓ VM deleted.\033[0m")
+	return nil
+}
+
+func vmExists(cfg *bootstrap.VMConfig) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
+		Host:     cfg.VCenterHost,
+		Username: cfg.VCenterUsername,
+		Password: cfg.VCenterPassword,
+		Port:     cfg.VCenterPort,
+		Insecure: cfg.VCenterInsecure,
+	})
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = vclient.Disconnect() }()
+	vmObj, err := vclient.FindVM(cfg.Datacenter, cfg.Name)
+	if err != nil {
+		return false, err
+	}
+	return vmObj != nil, nil
+}
+
+func runSmokeChecksOnly(cfg *bootstrap.VMConfig, dataMount string, swapSizeGB int, keyPath string, sshPort int, cleanup bool, settleSeconds int) error {
+	if settleSeconds > 0 {
+		fmt.Printf("  Waiting %ds for services to settle...\n", settleSeconds)
+		time.Sleep(time.Duration(settleSeconds) * time.Second)
+	}
+
+	fmt.Println("  Running SSH checks...")
+	if err := smokeSSHChecks(cfg.Username, cfg.IPAddress, keyPath, sshPort, dataMount, swapSizeGB); err != nil {
+		fmt.Printf("\033[31m✗ Smoke checks failed: %v\033[0m\n", err)
+	} else {
+		fmt.Println("\033[32m✓ Smoke checks passed\033[0m")
+	}
+
+	if !cleanup {
+		cleanup = readYesNo("Cleanup (delete VM)?", false)
+	}
+	if cleanup {
+		fmt.Println()
+		fmt.Println("Cleanup")
+		return cleanupVM(cfg, cfg.Name)
+	}
+
+	fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, cfg.IPAddress)
 	return nil
 }

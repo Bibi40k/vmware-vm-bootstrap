@@ -1,6 +1,7 @@
 package iso
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,15 @@ import (
 
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 )
+
+const isoModifierVersion = "2026-02-24-20.04-append-v2"
+
+type isoMeta struct {
+	Version       string `json:"version"`
+	SourcePath    string `json:"source_path"`
+	SourceSize    int64  `json:"source_size"`
+	SourceModTime int64  `json:"source_mod_time"`
+}
 
 // ModifyUbuntuISO modifies Ubuntu ISO to enable autoinstall mode.
 // Returns path to modified ISO and whether it was newly created (vs cached).
@@ -26,11 +36,26 @@ func (m *Manager) ModifyUbuntuISO(originalISOPath string) (path string, wasCreat
 	base := filepath.Base(originalISOPath)
 	modifiedName := strings.Replace(base, ".iso", configs.Defaults.ISO.UbuntuModifiedSuffix+".iso", 1)
 	modifiedPath := filepath.Join(dir, modifiedName)
+	metaPath := modifiedPath + ".meta.json"
+
+	srcInfo, srcErr := os.Stat(originalISOPath)
+	if srcErr != nil {
+		return "", false, fmt.Errorf("stat source ISO: %w", srcErr)
+	}
 
 	// Check if modified ISO already exists (idempotency)
 	if _, err := os.Stat(modifiedPath); err == nil {
-		fmt.Printf("✅ Modified Ubuntu ISO already exists: %s\n", modifiedPath)
-		return modifiedPath, false, nil
+		if meta, err := readISOMeta(metaPath); err == nil {
+			if meta.Version == isoModifierVersion &&
+				meta.SourceSize == srcInfo.Size() &&
+				meta.SourceModTime == srcInfo.ModTime().Unix() {
+				fmt.Printf("✅ Modified Ubuntu ISO already exists: %s\n", modifiedPath)
+				return modifiedPath, false, nil
+			}
+		}
+		// Stale or unknown meta -> rebuild
+		_ = os.Remove(modifiedPath)
+		_ = os.Remove(metaPath)
 	}
 
 	fmt.Println("⚙️  Modifying Ubuntu ISO for autoinstall...")
@@ -72,8 +97,37 @@ func (m *Manager) ModifyUbuntuISO(originalISOPath string) (path string, wasCreat
 		return "", false, fmt.Errorf("failed to repack ISO: %w", err)
 	}
 
+	if err := writeISOMeta(metaPath, isoMeta{
+		Version:       isoModifierVersion,
+		SourcePath:    originalISOPath,
+		SourceSize:    srcInfo.Size(),
+		SourceModTime: srcInfo.ModTime().Unix(),
+	}); err != nil {
+		return "", false, fmt.Errorf("failed to write ISO metadata: %w", err)
+	}
+
 	fmt.Printf("✅ Ubuntu ISO modified successfully: %s\n", modifiedPath)
 	return modifiedPath, true, nil
+}
+
+func readISOMeta(path string) (isoMeta, error) {
+	var meta isoMeta
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return meta, err
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return meta, err
+	}
+	return meta, nil
+}
+
+func writeISOMeta(path string, meta isoMeta) error {
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
 }
 
 // extractISOWithProgress extracts ISO with progress indicator
@@ -250,7 +304,7 @@ func (m *Manager) modifyGRUBFile(filePath string) error {
 	})
 
 	// 4. Add autoinstall for ISOLINUX "append" lines (used by 20.04 BIOS)
-	appendRegex := regexp.MustCompile(`(?m)^(\\s*append\\s+)(.*)$`)
+	appendRegex := regexp.MustCompile(`(?m)^(\s*append\s+)(.*)$`)
 	modified = appendRegex.ReplaceAllStringFunc(modified, func(match string) string {
 		if strings.Contains(match, "autoinstall") {
 			return match
