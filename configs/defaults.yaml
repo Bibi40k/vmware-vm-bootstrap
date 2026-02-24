@@ -1,0 +1,44 @@
+# vmware-vm-bootstrap library defaults
+# All hardcoded values are centralized here.
+# Override per-VM via VMConfig struct fields.
+
+vcenter:
+  port: 443
+
+vm:
+  firmware: bios
+  guest_os: ubuntu64Guest
+
+network:
+  interface: ens192  # Default NIC name on VMware (govmomi assigns this)
+
+cloudinit:
+  locale: en_US.UTF-8
+  timezone: UTC
+  keyboard_layout: us
+  swap_size_gb: 2
+  packages:
+    - open-vm-tools
+  user_groups: sudo,adm,dialout,cdrom,audio,video,plugdev,users
+  user_shell: /bin/bash
+
+timeouts:
+  installation_minutes: 30       # Max wait for Ubuntu autoinstall to complete
+  polling_seconds: 10            # Interval between installation status checks
+  hostname_checks: 3             # Consecutive checks with correct hostname = install done
+  service_startup_seconds: 30    # Extra wait after hostname confirmed (SSH/services start)
+  ssh_retries: 3                 # SSH availability verification attempts
+  ssh_connect_seconds: 5         # Timeout per SSH connection attempt
+  ssh_retry_delay_seconds: 2     # Delay between SSH retry attempts
+  hardware_init_seconds: 5       # Wait for VM hardware to initialize after power-on
+  download_minutes: 30           # Max time to download Ubuntu ISO
+  upload_progress_seconds: 2     # Progress print interval during datastore upload
+  extract_progress_seconds: 3    # Progress print interval during ISO extraction
+
+iso:
+  nocloud_volume_id: CIDATA             # Volume label for NoCloud datasource (must be uppercase)
+  grub_timeout_seconds: 5               # GRUB boot menu timeout (reduced from Ubuntu default 30s)
+  cache_dir: cache                      # Local cache directory for downloaded/modified ISOs
+  ubuntu_modified_suffix: -autoinstall  # Suffix added to modified Ubuntu ISO filename
+  extract_dir_name: ubuntu-extracted    # Temp directory name for ISO extraction
+  ubuntu_volume_id: Ubuntu-AI           # Volume ID for repacked Ubuntu ISO

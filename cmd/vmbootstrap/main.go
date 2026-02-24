@@ -1,0 +1,78 @@
+// vmbootstrap - CLI tool for managing and bootstrapping VMs in VMware vCenter
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/signal"
+
+	"github.com/spf13/cobra"
+)
+
+var vcenterConfigFile string
+
+// mainSigCh receives SIGINT for the default (non-bootstrap) handler.
+// bootstrapVM temporarily stops delivery to this channel so it can handle
+// Ctrl+C itself (cancel context + offer VM cleanup).
+var mainSigCh = make(chan os.Signal, 1)
+
+var rootCmd = &cobra.Command{
+	Use:           "vmbootstrap",
+	Short:         "Manage and bootstrap Ubuntu VMs in VMware vCenter",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return runManager()
+	},
+}
+
+var runCmd = &cobra.Command{
+	Use:           "run",
+	Short:         "Select a VM config and bootstrap it",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return runBootstrapSelector()
+	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
+		"Path to vCenter config file (SOPS encrypted)")
+	rootCmd.AddCommand(runCmd)
+}
+
+func main() {
+	// Handle Ctrl+C — print a clean message and exit 0 so make doesn't show "*** Interrupt".
+	// bootstrapVM temporarily calls signal.Stop(mainSigCh) to intercept Ctrl+C itself.
+	signal.Notify(mainSigCh, os.Interrupt)
+	go func() {
+		<-mainSigCh
+		fmt.Println("\nCancelled.")
+		os.Exit(0)
+	}()
+
+	if err := rootCmd.Execute(); err != nil {
+		const (
+			red    = "\033[31m"
+			yellow = "\033[33m"
+			cyan   = "\033[36m"
+			reset  = "\033[0m"
+		)
+		if ue, ok := err.(*userError); ok {
+			fmt.Fprintf(os.Stderr, "%sError:%s %s\n", red, reset, ue.Error())
+			if hint := ue.Hint(); hint != "" {
+				fmt.Fprintf(os.Stderr, "%sHint:%s %s%s%s\n", yellow, reset, cyan, hint, reset)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "%sError:%s %v\n", red, reset, err)
+		}
+		os.Exit(1)
+	}
+}

@@ -1,0 +1,13 @@
+version: 2
+ethernets:
+  {{ .InterfaceName }}:
+    addresses:
+      - {{ .IPAddress }}/{{ .CIDR }}
+    gateway4: {{ .Gateway }}
+    nameservers:
+      addresses:
+        {{- range .DNS }}
+        - {{ . }}
+        {{- end }}
+    dhcp4: false
+    dhcp6: false

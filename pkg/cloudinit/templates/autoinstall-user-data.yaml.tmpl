@@ -1,0 +1,188 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+  refresh-installer:
+    update: no
+
+  interactive-sections: []
+
+  locale: {{ .Locale }}
+  timezone: {{ .Timezone }}
+
+  keyboard:
+    layout: {{ .KeyboardLayout }}
+
+  network:
+    version: 2
+    ethernets:
+      ens192:
+        dhcp4: false
+        addresses:
+          - {{ .IPAddress }}/{{ .CIDR }}
+        routes:
+          - to: default
+            via: {{ .Gateway }}
+        nameservers:
+          addresses:
+            {{- range .DNS }}
+            - {{ . }}
+            {{- end }}
+
+  early-commands:
+    - echo "nameserver {{ index .DNS 0 }}" > /etc/resolv.conf
+    {{- range $i, $dns := .DNS }}{{- if gt $i 0 }}
+    - echo "nameserver {{ $dns }}" >> /etc/resolv.conf
+    {{- end }}{{- end }}
+
+  storage:
+    config:
+      - type: disk
+        id: disk1
+        path: /dev/sda
+        ptable: gpt
+        wipe: superblock
+        preserve: false
+        grub_device: true
+
+      - type: partition
+        id: bios-boot-partition
+        device: disk1
+        size: 1M
+        flag: bios_grub
+
+      - type: partition
+        id: efi-partition
+        device: disk1
+        size: 512M
+        flag: boot
+
+      - type: partition
+        id: boot-partition
+        device: disk1
+        size: 500M
+
+      - type: partition
+        id: swap-partition
+        device: disk1
+        size: {{ .SwapSize }}
+
+      - type: partition
+        id: root-partition
+        device: disk1
+        size: -1
+
+      - type: format
+        id: efi-format
+        volume: efi-partition
+        fstype: fat32
+
+      - type: format
+        id: boot-format
+        volume: boot-partition
+        fstype: ext4
+
+      - type: format
+        id: swap-format
+        volume: swap-partition
+        fstype: swap
+
+      - type: format
+        id: root-format
+        volume: root-partition
+        fstype: ext4
+
+      - type: mount
+        id: efi-mount
+        device: efi-format
+        path: /boot/efi
+
+      - type: mount
+        id: boot-mount
+        device: boot-format
+        path: /boot
+
+      - type: mount
+        id: swap-mount
+        device: swap-format
+        path: none
+
+      - type: mount
+        id: root-mount
+        device: root-format
+        path: /
+      {{- if .DataDiskMountPath }}
+
+      - type: disk
+        id: disk2
+        path: /dev/sdb
+        ptable: gpt
+        wipe: superblock
+        preserve: false
+
+      - type: partition
+        id: data-partition
+        device: disk2
+        size: -1
+
+      - type: format
+        id: data-format
+        volume: data-partition
+        fstype: ext4
+
+      - type: mount
+        id: data-mount
+        device: data-format
+        path: {{ .DataDiskMountPath }}
+      {{- end }}
+
+  identity:
+    hostname: {{ .Hostname }}
+    username: {{ .Username }}
+    {{- if .PasswordHash }}
+    password: "{{ .PasswordHash }}"
+    {{- else }}
+    password: "!"
+    {{- end }}
+
+  ssh:
+    install-server: true
+    allow-pw: {{ if .AllowPasswordSSH }}true{{ else }}false{{ end }}
+
+  packages:
+    {{- range .Packages }}
+    - {{ . }}
+    {{- end }}
+
+  late-commands:
+    - curtin in-target --target=/target -- cloud-init clean --machine-id --logs --seed
+
+  user-data:
+    preserve_hostname: true
+    timezone: {{ .Timezone }}
+    manage_etc_hosts: true
+
+    users:
+      - name: {{ .Username }}
+        gecos: {{ .Username }}
+        groups: {{ .UserGroups }}
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: {{ .UserShell }}
+        lock_passwd: {{ if .PasswordHash }}false{{ else }}true{{ end }}
+        {{- if .PasswordHash }}
+        passwd: "{{ .PasswordHash }}"
+        {{- end }}
+        ssh_authorized_keys:
+          {{- range .SSHPublicKeys }}
+          - {{ . }}
+          {{- end }}
+
+    write_files:
+      - path: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        content: "network: {config: disabled}\n"
+        permissions: '0644'
+
+    runcmd:
+      - netplan apply
+      - systemctl enable open-vm-tools
+      - systemctl start open-vm-tools

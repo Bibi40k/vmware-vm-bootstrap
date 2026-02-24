@@ -1,0 +1,24 @@
+vm:
+  name: "web-01"
+  cpus: 2
+  memory_mb: 4096
+  disk_size_gb: 40
+  data_disk_size_gb: 100
+  data_disk_mount_path: "/data"
+  swap_size_gb: 2
+  ubuntu_version: "24.04"
+  username: "sysadmin"
+  ssh_key_path: "~/.ssh/id_ed25519.pub"
+  ssh_key: ""
+  password: "change-me"
+  allow_password_ssh: false
+  ip_address: "192.168.1.10"
+  netmask: "255.255.255.0"
+  gateway: "192.168.1.1"
+  dns: "8.8.8.8"
+  dns2: "1.1.1.1"
+  datastore: "SSD01"
+  network_name: "LAN"
+  folder: "Production"
+  resource_pool: "Resources"
+  timeout_minutes: 30

@@ -1,0 +1,11 @@
+vcenter:
+  host: "vcenter.example.com"
+  username: "administrator@vsphere.local"
+  password: "secret"
+  datacenter: "DC1"
+  iso_datastore: "SSD01"
+  folder: "Production"
+  resource_pool: "Resources"
+  network: "LAN"
+  port: 443
+  insecure: false

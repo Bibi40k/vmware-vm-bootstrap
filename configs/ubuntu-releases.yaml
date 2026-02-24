@@ -1,0 +1,28 @@
+# Ubuntu Server ISO download information
+# Update URL and checksum when new Ubuntu LTS point releases are published.
+# Checksum: SHA256 from https://releases.ubuntu.com/<version>/SHA256SUMS
+
+releases:
+  "24.04":
+    url: https://releases.ubuntu.com/noble/ubuntu-24.04.4-live-server-amd64.iso
+    checksum: ""  # Set to SHA256 hash to enable verification
+
+  "22.04":
+    url: https://releases.ubuntu.com/jammy/ubuntu-22.04.5-live-server-amd64.iso
+    checksum: ""  # Set to SHA256 hash to enable verification
+
+  "20.04":
+    url: https://releases.ubuntu.com/focal/ubuntu-20.04.6-live-server-amd64.iso
+    checksum: ""  # Set to SHA256 hash to enable verification
+
+  "18.04":
+    url: https://releases.ubuntu.com/bionic/ubuntu-18.04.6-live-server-amd64.iso
+    checksum: ""  # Set to SHA256 hash to enable verification
+  
+  "16.04":
+    url: https://releases.ubuntu.com/xenial/ubuntu-16.04.7-server-amd64.iso
+    checksum: ""  # Set to SHA256 hash to enable verification
+  
+  "14.04":
+    url: https://releases.ubuntu.com/trusty/ubuntu-14.04.6-server-amd64.iso
+    checksum: ""  # Set to SHA256 hash to enable verification
