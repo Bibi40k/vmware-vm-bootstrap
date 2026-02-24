@@ -56,6 +56,10 @@ jobs:
           done
           (cd dist && sha256sum * > sha256sums.txt)
 
+      - name: Generate release notes
+        run: |
+          ./scripts/release-notes.sh "${{ steps.version.outputs.value }}" > dist/release-notes.md
+
       - name: Ensure tag exists (manual releases)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
@@ -71,7 +75,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.value }}
           name: ${{ steps.version.outputs.value }}
-          body_path: docs/RELEASES.md
+          body_path: dist/release-notes.md
           files: dist/*
           draft: ${{ github.event_name == 'push' }}
           fail_on_unmatched_files: true
