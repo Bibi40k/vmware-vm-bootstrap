@@ -2,6 +2,9 @@
 
 ![CI](https://github.com/Bibi40k/vmware-vm-bootstrap/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Bibi40k/vmware-vm-bootstrap/master/docs/coverage/coverage.json)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Bibi40k/vmware-vm-bootstrap)](https://goreportcard.com/report/github.com/Bibi40k/vmware-vm-bootstrap)
+![Go Version](https://img.shields.io/github/go-mod/go-version/Bibi40k/vmware-vm-bootstrap)
+![Release](https://img.shields.io/github/v/release/Bibi40k/vmware-vm-bootstrap)
 
 **Go library for automated VM deployment in VMware vSphere with cloud-init.**
 
