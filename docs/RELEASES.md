@@ -3,10 +3,15 @@
 ## Unreleased
 
 Highlights:
-- TBD
+- Configurable guest NIC name (no longer hard-coded `ens192`).
+- Smoke test improvements (reuse/recreate, SSH key handling, SSH port support, better feedback).
+- ISO autoinstall cache invalidation via metadata.
+- Added smoke test doc and automated release notes flow.
 
 Notes:
-- TBD
+- Ubuntu 20.04 autoinstall now patches ISOLINUX `append` lines.
+- Release notes generated from `docs/RELEASES.md` via `scripts/release-notes.sh`.
+- `--debug` writes to `tmp/vmbootstrap-debug.log`.
 
 ## v0.1.0 (2026-02-24)
 
