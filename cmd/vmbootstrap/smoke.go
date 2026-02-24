@@ -51,15 +51,17 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		VCenterPort:     vcCfg.VCenter.Port,
 		VCenterInsecure: vcCfg.VCenter.Insecure,
 
-		Name:             v.Name,
-		CPUs:             v.CPUs,
-		MemoryMB:         v.MemoryMB,
-		DiskSizeGB:       v.DiskSizeGB,
-		UbuntuVersion:    v.UbuntuVersion,
-		Username:         v.Username,
-		SSHPublicKeys:    []string{sshKey},
-		Password:         v.Password,
-		AllowPasswordSSH: v.AllowPasswordSSH,
+		Name:               v.Name,
+		CPUs:               v.CPUs,
+		MemoryMB:           v.MemoryMB,
+		DiskSizeGB:         v.DiskSizeGB,
+		UbuntuVersion:      v.UbuntuVersion,
+		Username:           v.Username,
+		SSHPublicKeys:      []string{sshKey},
+		Password:           v.Password,
+		AllowPasswordSSH:   v.AllowPasswordSSH,
+		SkipSSHVerify:      true,
+		SkipCleanupOnError: true,
 
 		NetworkName: v.NetworkName,
 		IPAddress:   v.IPAddress,
@@ -93,10 +95,12 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	signal.Stop(mainSigCh)
 	localSigCh := make(chan os.Signal, 1)
 	signal.Notify(localSigCh, os.Interrupt)
+	interrupted := false
 	go func() {
 		select {
 		case <-localSigCh:
 			fmt.Println("\n\n\033[33m⚠ Interrupted — stopping smoke test...\033[0m")
+			interrupted = true
 			cancel()
 		case <-ctx.Done():
 		}
@@ -110,13 +114,31 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 
 	if err != nil {
 		if ctx.Err() == context.Canceled {
-			if cleanup {
-				offerVMCleanup(cfg)
+			if interrupted {
+				if !cleanup {
+					cleanup = readYesNo("Cleanup (delete VM)?", false)
+				}
+				if cleanup {
+					fmt.Println()
+					fmt.Println("Cleanup")
+					_ = cleanupVM(cfg, cfg.Name)
+				}
 			}
 			fmt.Println("\nCancelled.")
 			os.Exit(0)
 		}
-		return fmt.Errorf("bootstrap failed: %w", err)
+		fmt.Printf("\n\033[31m✗ Bootstrap failed: %v\033[0m\n", err)
+		fmt.Printf("  VM may still be running: %s\n", cfg.Name)
+		fmt.Printf("  Inspect with: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, cfg.IPAddress)
+		if !cleanup {
+			cleanup = readYesNo("Cleanup (delete VM)?", false)
+		}
+		if cleanup {
+			fmt.Println()
+			fmt.Println("Cleanup")
+			return cleanupVM(cfg, cfg.Name)
+		}
+		return nil
 	}
 
 	fmt.Println()

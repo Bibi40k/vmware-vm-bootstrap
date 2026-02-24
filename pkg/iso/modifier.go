@@ -249,6 +249,26 @@ func (m *Manager) modifyGRUBFile(filePath string) error {
 		return kernelCmd + params
 	})
 
+	// 4. Add autoinstall for ISOLINUX "append" lines (used by 20.04 BIOS)
+	appendRegex := regexp.MustCompile(`(?m)^(\\s*append\\s+)(.*)$`)
+	modified = appendRegex.ReplaceAllStringFunc(modified, func(match string) string {
+		if strings.Contains(match, "autoinstall") {
+			return match
+		}
+		parts := appendRegex.FindStringSubmatch(match)
+		if len(parts) < 3 {
+			return match
+		}
+		prefix := parts[1]
+		params := parts[2]
+		if strings.Contains(params, "---") {
+			params = strings.Replace(params, "---", "autoinstall ds=nocloud ---", 1)
+		} else {
+			params = "autoinstall ds=nocloud " + params
+		}
+		return prefix + params
+	})
+
 	// Only write if content changed
 	if modified == original {
 		return nil
@@ -265,10 +285,27 @@ func (m *Manager) modifyGRUBFile(filePath string) error {
 // repackISO repacks extracted directory to ISO using genisoimage
 // Matches Python implementation exactly - genisoimage handles large ISOs better than xorriso
 func (m *Manager) repackISO(extractDir, outputPath string) error {
-	// Check for BIOS boot image (required)
-	biosBootPath := filepath.Join(extractDir, "boot/grub/i386-pc/eltorito.img")
-	if _, err := os.Stat(biosBootPath); err != nil {
-		return fmt.Errorf("BIOS boot image not found: %w", err)
+	// Find BIOS boot image (supports both grub and isolinux layouts)
+	type biosBoot struct {
+		path    string
+		catalog string
+	}
+	biosCandidates := []biosBoot{
+		{path: "boot/grub/i386-pc/eltorito.img", catalog: "boot.catalog"},
+		{path: "isolinux/isolinux.bin", catalog: "isolinux/boot.cat"},
+	}
+	var biosBootPath string
+	var biosCatalog string
+	for _, candidate := range biosCandidates {
+		fullPath := filepath.Join(extractDir, candidate.path)
+		if _, err := os.Stat(fullPath); err == nil {
+			biosBootPath = candidate.path
+			biosCatalog = candidate.catalog
+			break
+		}
+	}
+	if biosBootPath == "" {
+		return fmt.Errorf("BIOS boot image not found")
 	}
 
 	// Find UEFI boot image (try multiple locations like Python does)
@@ -295,8 +332,8 @@ func (m *Manager) repackISO(extractDir, outputPath string) error {
 		"-J", "-joliet-long", // Joliet
 		"-o", outputPath, // Output file
 		// BIOS boot (legacy)
-		"-b", "boot/grub/i386-pc/eltorito.img",
-		"-c", "boot.catalog",
+		"-b", biosBootPath,
+		"-c", biosCatalog,
 		"-no-emul-boot",
 		"-boot-load-size", "4",
 		"-boot-info-table",

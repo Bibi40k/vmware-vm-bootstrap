@@ -180,7 +180,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 	var bootstrapSuccess bool
 	var nocloudUploadPath string // set after upload, used in cleanup
 	defer func() {
-		if !bootstrapSuccess {
+		if !bootstrapSuccess && !cfg.SkipCleanupOnError {
 			if createdVM != nil {
 				logger.Warn("Bootstrap failed - cleaning up partial VM", "name", cfg.Name)
 				if deleteErr := creator.Delete(createdVM); deleteErr != nil {
@@ -406,11 +406,14 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 	}
 
 	// STEP 17: Verify SSH access
-	if err := b.checkSSH(ctx, cfg.IPAddress); err != nil {
-		return nil, fmt.Errorf("SSH verification failed: %w", err)
+	if cfg.SkipSSHVerify {
+		logger.Warn("Skipping SSH verification (SkipSSHVerify=true)")
+	} else {
+		if err := b.checkSSH(ctx, cfg.IPAddress); err != nil {
+			return nil, fmt.Errorf("SSH verification failed: %w", err)
+		}
+		logger.Info("SSH access verified")
 	}
-
-	logger.Info("SSH access verified")
 
 	// Mark bootstrap as successful (prevents defer cleanup)
 	bootstrapSuccess = true
@@ -419,7 +422,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		Name:            cfg.Name,
 		IPAddress:       cfg.IPAddress,
 		ManagedObject:   createdVM.Reference(),
-		SSHReady:        true,
+		SSHReady:        !cfg.SkipSSHVerify,
 		Hostname:        cfg.Name,
 		VCenterHost:     cfg.VCenterHost,
 		VCenterPort:     cfg.VCenterPort,

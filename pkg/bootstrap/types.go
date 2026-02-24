@@ -47,6 +47,10 @@ type VMConfig struct {
 	PasswordHash  string   // Optional pre-computed password hash (bcrypt); overrides Password if both set
 	// Allow SSH password authentication (default: false). Requires Password or PasswordHash.
 	AllowPasswordSSH bool
+	// Skip SSH verification during bootstrap (default: false).
+	SkipSSHVerify bool
+	// Keep VM/ISO on bootstrap failure for debugging (default: false).
+	SkipCleanupOnError bool
 
 	// === Advanced Options ===
 	Timezone   string // System timezone (default: "UTC")
