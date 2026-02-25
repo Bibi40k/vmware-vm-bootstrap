@@ -3,15 +3,11 @@
 ## Unreleased
 
 Highlights:
-- Configurable guest NIC name (no longer hard-coded `ens192`).
-- Smoke test improvements (reuse/recreate, SSH key handling, SSH port support, better feedback).
-- ISO autoinstall cache invalidation via metadata.
-- Added smoke test doc and automated release notes flow.
+- Stage 1 result export now includes SSH host fingerprint for downstream automation.
+- `vmbootstrap run --stage1-result` writes a normalized Stage 1 contract file.
 
 Notes:
-- Ubuntu 20.04 autoinstall now patches ISOLINUX `append` lines.
-- Release notes generated from `docs/RELEASES.md` via `scripts/release-notes.sh`.
-- `--debug` writes to `tmp/vmbootstrap-debug.log`.
+- Stage 1 output enables strict host key verification in downstream tools (no prompt required).
 
 ## v0.1.0 (2026-02-24)
 

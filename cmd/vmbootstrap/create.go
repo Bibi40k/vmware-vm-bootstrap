@@ -52,7 +52,7 @@ func buildDNS(primary, secondary string) []string {
 }
 
 // bootstrapVM decrypts vmConfigPath, merges with vcenter config, and runs bootstrap.
-func bootstrapVM(vmConfigPath string) error {
+func bootstrapVM(vmConfigPath string, stage1Path string) error {
 	fmt.Printf("\033[1mBootstrap VM\033[0m — %s\n", vmConfigPath)
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
@@ -229,6 +229,13 @@ func bootstrapVM(vmConfigPath string) error {
 	fmt.Printf("  IP:        %s\n", vm.IPAddress)
 	fmt.Printf("  SSH ready: %v\n", vm.SSHReady)
 	fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, vm.IPAddress)
+
+	if stage1Path != "" {
+		if err := writeStage1Result(stage1Path, cfg, v.SSHKeyPath, v.SSHPort, vm); err != nil {
+			return err
+		}
+		fmt.Printf("  Stage1 result saved: %s\n\n", stage1Path)
+	}
 
 	return nil
 }

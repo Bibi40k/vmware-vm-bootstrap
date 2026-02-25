@@ -12,11 +12,12 @@ import (
 
 // Stage1Result is the normalized output contract from Stage 1 provisioning.
 type Stage1Result struct {
-	VMName        string `json:"vm_name" yaml:"vm_name"`
-	IPAddress     string `json:"ip" yaml:"ip"`
-	SSHUser       string `json:"ssh_user" yaml:"ssh_user"`
-	SSHPrivateKey string `json:"ssh_key_path" yaml:"ssh_key_path"`
-	SSHPort       int    `json:"ssh_port,omitempty" yaml:"ssh_port,omitempty"`
+	VMName             string `json:"vm_name" yaml:"vm_name"`
+	IPAddress          string `json:"ip" yaml:"ip"`
+	SSHUser            string `json:"ssh_user" yaml:"ssh_user"`
+	SSHPrivateKey      string `json:"ssh_key_path" yaml:"ssh_key_path"`
+	SSHPort            int    `json:"ssh_port,omitempty" yaml:"ssh_port,omitempty"`
+	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty" yaml:"ssh_host_fingerprint,omitempty"`
 }
 
 // Validate checks the minimum contract required by Stage 2.
@@ -35,6 +36,14 @@ func (r Stage1Result) Validate() error {
 	}
 	if r.SSHPort < 0 || r.SSHPort > 65535 {
 		return fmt.Errorf("stage1 ssh_port must be in range 0..65535")
+	}
+	if fp := strings.TrimSpace(r.SSHHostFingerprint); fp != "" {
+		if !strings.HasPrefix(fp, "SHA256:") {
+			return fmt.Errorf("stage1 ssh_host_fingerprint must be in SHA256:... format")
+		}
+		if len(fp) < len("SHA256:")+8 {
+			return fmt.Errorf("stage1 ssh_host_fingerprint is too short")
+		}
 	}
 	return nil
 }
