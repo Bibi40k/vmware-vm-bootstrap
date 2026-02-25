@@ -3,6 +3,14 @@
 ## Unreleased
 
 Highlights:
+- TBD
+
+Notes:
+- TBD
+
+## v0.1.5 (2026-02-26)
+
+Highlights:
 - Stage 1 result export now includes SSH host fingerprint for downstream automation.
 - `vmbootstrap run --stage1-result` writes a normalized Stage 1 contract file.
 
