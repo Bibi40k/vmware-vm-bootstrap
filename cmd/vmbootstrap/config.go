@@ -3,15 +3,18 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	survey "github.com/AlecAivazis/survey/v2"
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
@@ -566,6 +569,7 @@ func startDraftInterruptHandler(targetPath, draftPath string, dataFn func() ([]b
 			}
 		}
 		fmt.Println("\nCancelled.")
+		restoreTTYOnExit()
 		os.Exit(0)
 	}()
 	return func() {
@@ -1382,17 +1386,19 @@ func readFilePath(field, current string) string {
 // One instance is required — multiple buffered readers over the same fd
 // would each buffer ahead and consume each other's input.
 var stdinReader = bufio.NewReader(os.Stdin)
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+var caretEscapeRE = regexp.MustCompile(`\^\[\[[0-9;?]*[ -/]*[@-~]`)
 
 // readLine prints "  Field [current]: " and reads a line.
 // Returns current if the user presses Enter without typing anything.
 func readLine(field, current string) string {
+	prompt := ""
 	if current != "" {
-		fmt.Printf("  %s [\033[36m%s\033[0m]: ", field, current)
+		prompt = fmt.Sprintf("  %s [\033[36m%s\033[0m]: ", field, current)
 	} else {
-		fmt.Printf("  %s: ", field)
+		prompt = fmt.Sprintf("  %s: ", field)
 	}
-	s, _ := stdinReader.ReadString('\n')
-	s = strings.TrimSpace(s)
+	s := readPromptLine(prompt)
 	if s == "" {
 		return current
 	}
@@ -1424,16 +1430,9 @@ func readPassword(field string) string {
 // readInt prints the prompt and reads a validated integer.
 func readInt(field string, current, min, max int) int {
 	for {
-		fmt.Printf("  %s [\033[36m%d\033[0m]: ", field, current)
-		s, _ := stdinReader.ReadString('\n')
-		s = strings.TrimSpace(s)
+		s := readPromptLine(fmt.Sprintf("  %s [\033[36m%d\033[0m]: ", field, current))
 		if s == "" {
 			return current
-		}
-		// Arrow keys send escape sequences (\033[A/B) — they don't work in plain-text mode.
-		if strings.ContainsRune(s, '\033') {
-			fmt.Println("  (type a number — arrow keys don't work here)")
-			continue
 		}
 		v, err := parseInt(s)
 		if err != nil || v < min || v > max {
@@ -1451,9 +1450,7 @@ func readYesNo(msg string, defaultYes bool) bool {
 		hint = "[Y/n]"
 	}
 	for {
-		fmt.Printf("  %s %s: ", msg, hint)
-		s, _ := stdinReader.ReadString('\n')
-		s = strings.ToLower(strings.TrimSpace(s))
+		s := strings.ToLower(readPromptLine(fmt.Sprintf("  %s %s: ", msg, hint)))
 		if s == "" {
 			return defaultYes
 		}
@@ -1465,6 +1462,47 @@ func readYesNo(msg string, defaultYes bool) bool {
 		}
 		fmt.Println("  Enter y or n")
 	}
+}
+
+func readPromptLine(prompt string) string {
+	rl, err := readline.NewEx(&readline.Config{Prompt: prompt})
+	if err == nil {
+		cleanup := func() {
+			_ = rl.Close()
+			stdinReader.Reset(os.Stdin)
+		}
+		line, err := rl.Readline()
+		if err == nil {
+			cleanup()
+			return strings.TrimSpace(line)
+		}
+		if errors.Is(err, readline.ErrInterrupt) {
+			// Restore terminal before signal handler (it may os.Exit immediately).
+			cleanup()
+			if p, findErr := os.FindProcess(os.Getpid()); findErr == nil {
+				_ = p.Signal(os.Interrupt)
+			}
+			return ""
+		}
+		cleanup()
+		return ""
+	}
+
+	fmt.Print(prompt)
+	line, _ := stdinReader.ReadString('\n')
+	return sanitizeConsoleInput(line)
+}
+
+func sanitizeConsoleInput(raw string) string {
+	raw = ansiEscapeRE.ReplaceAllString(raw, "")
+	raw = caretEscapeRE.ReplaceAllString(raw, "")
+	raw = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, raw)
+	return strings.TrimSpace(raw)
 }
 
 // surveySelect wraps survey.AskOne for a Select prompt and calls drainStdin()

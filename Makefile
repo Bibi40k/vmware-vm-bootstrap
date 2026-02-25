@@ -1,4 +1,4 @@
-.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements run smoke config check-go
+.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements vm-deploy run smoke config check-go
 
 # Auto-download Go toolchain if local version < go.mod requirement
 export GOTOOLCHAIN=auto
@@ -33,7 +33,7 @@ help:
 	@printf "    $(GREEN)make vulncheck$(RESET)     Run govulncheck security scan\n"
 	@printf "\n$(BOLD)  VM Management$(RESET) $(YELLOW)(requires configs/vcenter.sops.yaml)$(RESET)\n"
 	@printf "    $(GREEN)make config$(RESET)        Interactive config manager (create/edit VM configs)\n"
-	@printf "    $(GREEN)make run$(RESET)           Select a VM config and bootstrap it\n"
+	@printf "    $(GREEN)make vm-deploy$(RESET)     Select a VM config and bootstrap it\n"
 	@printf "    $(GREEN)make smoke$(RESET)         Bootstrap + minimal post-install checks + cleanup\n"
 	@printf "\n$(BOLD)  Maintenance$(RESET)\n"
 	@printf "    $(GREEN)make clean$(RESET)         Remove build artifacts and caches\n"
@@ -195,8 +195,11 @@ verify: check-go
 	@printf "$(GREEN)✓ All dependencies verified$(RESET)\n"
 
 # Select a VM config interactively and bootstrap it
-run: build-cli
+vm-deploy: build-cli
 	@bin/vmbootstrap run $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+# Backward-compatible alias (hidden from help menu)
+run: vm-deploy
 
 # Smoke test (bootstrap + minimal post-install checks + optional cleanup)
 smoke: build-cli

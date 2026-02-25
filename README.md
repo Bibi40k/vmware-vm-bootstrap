@@ -232,7 +232,7 @@ VM management (CLI):
 
 ```bash
 make config   # interactive config wizard
-make run      # bootstrap a VM
+make vm-deploy  # bootstrap a VM
 make smoke VM=configs/vm.myvm.sops.yaml  # bootstrap + smoke test (+ cleanup)
 ```
 

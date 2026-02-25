@@ -5,6 +5,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"syscall"
 	"time"
 )
@@ -43,4 +44,16 @@ func drainStdin() {
 		}
 		break
 	}
+}
+
+// restoreTTYOnExit best-effort restores terminal state before abrupt exit
+// from signal handlers (which skip defers).
+func restoreTTYOnExit() {
+	fd := int(os.Stdin.Fd())
+	_ = syscall.SetNonblock(fd, false)
+	stdinReader.Reset(os.Stdin)
+
+	cmd := exec.Command("stty", "sane")
+	cmd.Stdin = os.Stdin
+	_ = cmd.Run()
 }
