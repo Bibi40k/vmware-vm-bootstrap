@@ -608,6 +608,7 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 	deadline := time.Now().Add(timeout)
 	lastHeartbeat := started
 	heartbeatEvery := 10 * time.Second
+	estimatedInstall, estimateSamples := loadInstallDurationEstimate(cfg)
 
 	toolsWasRunning := false
 	rebootDetected := false
@@ -618,10 +619,15 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 	logger.Info("Installation progress",
 		"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
 		"elapsed", 0,
-		"remaining", time.Until(deadline).Truncate(time.Second),
+		"remaining_timeout", time.Until(deadline).Truncate(time.Second),
 		"tools_running", false,
 		"hostname", "",
 		"hostname_checks", fmt.Sprintf("%d/%d", hostnameCheckCount, requiredHostnameChecks))
+	if estimatedInstall > 0 {
+		logger.Info("Installation ETA baseline loaded",
+			"eta_total", estimatedInstall.Truncate(time.Second),
+			"samples", estimateSamples)
+	}
 
 	for {
 		select {
@@ -639,7 +645,7 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 					logger.Info("Installation progress",
 						"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
 						"elapsed", time.Since(started).Truncate(time.Second),
-						"remaining", time.Until(deadline).Truncate(time.Second))
+						"remaining_timeout", time.Until(deadline).Truncate(time.Second))
 				}
 				continue
 			}
@@ -649,7 +655,7 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 					logger.Info("Installation progress",
 						"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
 						"elapsed", time.Since(started).Truncate(time.Second),
-						"remaining", time.Until(deadline).Truncate(time.Second))
+						"remaining_timeout", time.Until(deadline).Truncate(time.Second))
 				}
 				continue
 			}
@@ -661,10 +667,20 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 				logger.Info("Installation progress",
 					"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
 					"elapsed", time.Since(started).Truncate(time.Second),
-					"remaining", time.Until(deadline).Truncate(time.Second),
+					"remaining_timeout", time.Until(deadline).Truncate(time.Second),
 					"tools_running", toolsRunning,
 					"hostname", hostname,
 					"hostname_checks", fmt.Sprintf("%d/%d", hostnameCheckCount, requiredHostnameChecks))
+				if estimatedInstall > 0 {
+					etaRemaining := estimatedInstall - time.Since(started)
+					if etaRemaining < 0 {
+						etaRemaining = 0
+					}
+					logger.Info("Installation ETA",
+						"eta_remaining", etaRemaining.Truncate(time.Second),
+						"eta_total", estimatedInstall.Truncate(time.Second),
+						"samples", estimateSamples)
+				}
 			}
 
 			if !toolsWasRunning && toolsRunning {
@@ -704,6 +720,7 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 					logger.Info("Installation complete, waiting for services to start...",
 						"wait", configs.Defaults.Timeouts.ServiceStartup())
 					time.Sleep(configs.Defaults.Timeouts.ServiceStartup())
+					_ = recordInstallDuration(cfg, time.Since(started))
 					return nil
 				}
 			} else if rebootDetected && toolsRunning && hostname != cfg.Name {
@@ -720,6 +737,7 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 					logger.Info("Installation complete (stable hostname), waiting for services...",
 						"wait", configs.Defaults.Timeouts.ServiceStartup())
 					time.Sleep(configs.Defaults.Timeouts.ServiceStartup())
+					_ = recordInstallDuration(cfg, time.Since(started))
 					return nil
 				}
 			} else if !rebootDetected && toolsRunning && hostname != cfg.Name {

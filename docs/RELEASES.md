@@ -8,6 +8,15 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.13 (2026-02-26)
+
+Highlights:
+- Installation progress now includes adaptive ETA based on local run history.
+
+Notes:
+- Stores per-profile install durations in `tmp/install-stats.json` and reports `Installation ETA`.
+- Keeps `remaining_timeout` visible as the hard upper bound.
+
 ## v0.1.12 (2026-02-26)
 
 Highlights:

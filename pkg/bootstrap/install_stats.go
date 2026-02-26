@@ -1,0 +1,87 @@
+package bootstrap
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+const (
+	installStatsPath      = "tmp/install-stats.json"
+	installStatsMaxSample = 30
+)
+
+type installStatsFile struct {
+	Profiles map[string]installProfile `json:"profiles"`
+}
+
+type installProfile struct {
+	SamplesSec []int64 `json:"samples_sec"`
+	UpdatedAt  string  `json:"updated_at"`
+}
+
+func installStatsKey(cfg *VMConfig) string {
+	ubuntu := strings.TrimSpace(cfg.UbuntuVersion)
+	if ubuntu == "" {
+		ubuntu = "unknown"
+	}
+	return fmt.Sprintf("ubuntu-%s_cpu-%d_mem-%d", ubuntu, cfg.CPUs, cfg.MemoryMB)
+}
+
+func loadInstallDurationEstimate(cfg *VMConfig) (time.Duration, int) {
+	data, err := os.ReadFile(installStatsPath)
+	if err != nil {
+		return 0, 0
+	}
+	var st installStatsFile
+	if err := json.Unmarshal(data, &st); err != nil || st.Profiles == nil {
+		return 0, 0
+	}
+	prof, ok := st.Profiles[installStatsKey(cfg)]
+	if !ok || len(prof.SamplesSec) == 0 {
+		return 0, 0
+	}
+	s := append([]int64(nil), prof.SamplesSec...)
+	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+	median := s[len(s)/2]
+	if median <= 0 {
+		return 0, 0
+	}
+	return time.Duration(median) * time.Second, len(prof.SamplesSec)
+}
+
+func recordInstallDuration(cfg *VMConfig, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(installStatsPath), 0o755); err != nil {
+		return err
+	}
+
+	st := installStatsFile{Profiles: map[string]installProfile{}}
+	if data, err := os.ReadFile(installStatsPath); err == nil {
+		_ = json.Unmarshal(data, &st)
+		if st.Profiles == nil {
+			st.Profiles = map[string]installProfile{}
+		}
+	}
+
+	key := installStatsKey(cfg)
+	prof := st.Profiles[key]
+	prof.SamplesSec = append(prof.SamplesSec, int64(d.Round(time.Second)/time.Second))
+	if len(prof.SamplesSec) > installStatsMaxSample {
+		prof.SamplesSec = prof.SamplesSec[len(prof.SamplesSec)-installStatsMaxSample:]
+	}
+	prof.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	st.Profiles[key] = prof
+
+	raw, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(installStatsPath, raw, 0o644)
+}
