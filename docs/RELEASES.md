@@ -8,6 +8,15 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.7 (2026-02-26)
+
+Highlights:
+- Autoinstall no-swap now works when `swap_size_gb=0` (swap partition omitted).
+- VM selection supports a clean Exit option in the bootstrap menu.
+
+Notes:
+- Ctrl+C in the VM selector exits without triggering a bootstrap prompt.
+
 ## v0.1.6 (2026-02-26)
 
 Highlights:
