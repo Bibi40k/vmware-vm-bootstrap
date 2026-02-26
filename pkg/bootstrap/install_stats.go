@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	installStatsPath      = "tmp/install-stats.json"
+	installStatsPath      = "install-stats.json"
 	installStatsMaxSample = 30
 )
 
@@ -33,7 +33,8 @@ func installStatsKey(cfg *VMConfig) string {
 }
 
 func loadInstallDurationEstimate(cfg *VMConfig) (time.Duration, int) {
-	data, err := os.ReadFile(installStatsPath)
+	statsPath := resolveInstallStatsPath()
+	data, err := os.ReadFile(statsPath)
 	if err != nil {
 		return 0, 0
 	}
@@ -58,12 +59,13 @@ func recordInstallDuration(cfg *VMConfig, d time.Duration) error {
 	if d <= 0 {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(installStatsPath), 0o755); err != nil {
+	statsPath := resolveInstallStatsPath()
+	if err := os.MkdirAll(filepath.Dir(statsPath), 0o755); err != nil {
 		return err
 	}
 
 	st := installStatsFile{Profiles: map[string]installProfile{}}
-	if data, err := os.ReadFile(installStatsPath); err == nil {
+	if data, err := os.ReadFile(statsPath); err == nil {
 		_ = json.Unmarshal(data, &st)
 		if st.Profiles == nil {
 			st.Profiles = map[string]installProfile{}
@@ -83,5 +85,24 @@ func recordInstallDuration(cfg *VMConfig, d time.Duration) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(installStatsPath, raw, 0o644)
+	return os.WriteFile(statsPath, raw, 0o644)
+}
+
+func resolveInstallStatsPath() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return filepath.Join("tmp", installStatsPath)
+	}
+	dir := wd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return filepath.Join(dir, "tmp", installStatsPath)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return filepath.Join("tmp", installStatsPath)
 }
