@@ -8,6 +8,14 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.9 (2026-02-26)
+
+Highlights:
+- Fixes VM selector lint regression introduced in v0.1.8.
+
+Notes:
+- No functional changes beyond lint cleanup.
+
 ## v0.1.8 (2026-02-26)
 
 Highlights:
