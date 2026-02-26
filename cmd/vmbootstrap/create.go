@@ -52,7 +52,7 @@ func buildDNS(primary, secondary string) []string {
 }
 
 // bootstrapVM decrypts vmConfigPath, merges with vcenter config, and runs bootstrap.
-func bootstrapVM(vmConfigPath string, stage1Path string) error {
+func bootstrapVM(vmConfigPath string, resultPath string) error {
 	fmt.Printf("\033[1mBootstrap VM\033[0m — %s\n", vmConfigPath)
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
@@ -75,6 +75,7 @@ func bootstrapVM(vmConfigPath string, stage1Path string) error {
 	}
 
 	v := vmFile.VM
+	resultPath = resolveBootstrapResultPath(resultPath, v.Name)
 
 	printConfigWarnings(v.DataDiskSizeGB, v.DataDiskMountPath, v.SwapSizeGB, v.SSHKeyPath, v.SSHKey, v.Password, v.SSHPort)
 
@@ -230,11 +231,11 @@ func bootstrapVM(vmConfigPath string, stage1Path string) error {
 	fmt.Printf("  SSH ready: %v\n", vm.SSHReady)
 	fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, vm.IPAddress)
 
-	if stage1Path != "" {
-		if err := writeStage1Result(stage1Path, cfg, v.SSHKeyPath, v.SSHPort, vm); err != nil {
+	if resultPath != "" {
+		if err := writeBootstrapResult(resultPath, cfg, v.SSHKeyPath, v.SSHPort, vm); err != nil {
 			return err
 		}
-		fmt.Printf("  Stage1 result saved: %s\n\n", stage1Path)
+		fmt.Printf("  Bootstrap result saved: %s\n\n", resultPath)
 	}
 
 	return nil

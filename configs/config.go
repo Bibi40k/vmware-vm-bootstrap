@@ -126,7 +126,7 @@ type ISODefaults struct {
 // OutputDefaults holds CLI output defaults.
 type OutputDefaults struct {
 	Enable           bool   `yaml:"enable"`
-	Stage1ResultPath string `yaml:"stage1_result_path"`
+	BootstrapResultPath string `yaml:"bootstrap_result_path"`
 }
 
 // UbuntuRelease holds download info for a single Ubuntu release.

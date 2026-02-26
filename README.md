@@ -124,7 +124,7 @@ Security note:
 If you want to feed the bootstrap output into another tool (e.g., `talos-devvm-bootstrap`), you can save a normalized result file:
 
 ```bash
-vmbootstrap run --stage1-result tmp/bootstrap-result.yaml
+vmbootstrap run --bootstrap-result tmp/bootstrap-result.yaml
 ```
 
 By default, the CLI writes a bootstrap result to `tmp/bootstrap-result.{vm}.yaml` (see `configs/defaults.yaml`).

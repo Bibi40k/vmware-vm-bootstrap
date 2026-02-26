@@ -206,7 +206,7 @@ func runBootstrapSelector() error {
 		fmt.Println("  Cancelled.")
 		return nil
 	}
-	return bootstrapVM(selectedPath, stage1ResultPath)
+	return bootstrapVM(selectedPath, bootstrapResultPath)
 }
 
 func selectVMConfig(title, prompt string) (string, string, error) {

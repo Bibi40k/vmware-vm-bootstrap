@@ -11,17 +11,17 @@ import (
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/bootstrap"
 )
 
-func writeStage1Result(path string, cfg *bootstrap.VMConfig, sshKeyPath string, sshPort int, vm *bootstrap.VM) error {
+func writeBootstrapResult(path string, cfg *bootstrap.VMConfig, sshKeyPath string, sshPort int, vm *bootstrap.VM) error {
 	keyPath := resolveSSHPrivateKeyPath(sshKeyPath)
 	if keyPath == "" {
-		return fmt.Errorf("cannot write stage1 result: vm.ssh_key_path is required (private key path not available)")
+		return fmt.Errorf("cannot write bootstrap result: vm.ssh_key_path is required (private key path not available)")
 	}
 	fp, err := computeSSHHostFingerprint(vm.IPAddress, sshPort)
 	if err != nil {
 		return fmt.Errorf("compute ssh host fingerprint: %w", err)
 	}
 
-	result := pkgconfig.Stage1Result{
+	result := pkgconfig.BootstrapResult{
 		VMName:             cfg.Name,
 		IPAddress:          vm.IPAddress,
 		SSHUser:            cfg.Username,
@@ -34,10 +34,10 @@ func writeStage1Result(path string, cfg *bootstrap.VMConfig, sshKeyPath string, 
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create stage1 result dir: %w", err)
+		return fmt.Errorf("create bootstrap result dir: %w", err)
 	}
-	if err := pkgconfig.SaveStage1Result(path, result); err != nil {
-		return fmt.Errorf("save stage1 result: %w", err)
+	if err := pkgconfig.SaveBootstrapResult(path, result); err != nil {
+		return fmt.Errorf("save bootstrap result: %w", err)
 	}
 	return nil
 }
@@ -56,13 +56,13 @@ func resolveSSHPrivateKeyPath(path string) string {
 	return p
 }
 
-func resolveStage1ResultPath(explicitPath, vmName string) string {
+func resolveBootstrapResultPath(explicitPath, vmName string) string {
 	path := strings.TrimSpace(explicitPath)
 	if path == "" {
 		if !configs.Defaults.Output.Enable {
 			return ""
 		}
-		path = strings.TrimSpace(configs.Defaults.Output.Stage1ResultPath)
+		path = strings.TrimSpace(configs.Defaults.Output.BootstrapResultPath)
 	}
 	if path == "" {
 		return ""

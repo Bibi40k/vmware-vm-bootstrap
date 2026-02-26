@@ -11,7 +11,7 @@ import (
 
 var vcenterConfigFile string
 var debugLogs bool
-var stage1ResultPath string
+var bootstrapResultPath string
 
 // mainSigCh receives SIGINT for the default (non-bootstrap) handler.
 // bootstrapVM temporarily stops delivery to this channel so it can handle
@@ -83,7 +83,7 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(smokeCmd)
 
-	runCmd.Flags().StringVar(&stage1ResultPath, "stage1-result", "",
+	runCmd.Flags().StringVar(&bootstrapResultPath, "bootstrap-result", "",
 		"Write bootstrap result to YAML/JSON file (optional)")
 
 	smokeCmd.Flags().String("config", "", "Path to VM config file (SOPS encrypted)")

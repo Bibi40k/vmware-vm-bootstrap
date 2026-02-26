@@ -8,11 +8,21 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.6 (2026-02-26)
+
+Highlights:
+- Bootstrap result terminology (no legacy naming) across CLI/docs/config.
+- Default bootstrap result output is enabled and configurable via `output.*`.
+
+Notes:
+- New flag `--bootstrap-result` replaces the previous output flag name.
+- Default output path: `tmp/bootstrap-result.{vm}.yaml` (can be disabled).
+
 ## v0.1.5 (2026-02-26)
 
 Highlights:
-- Bootstrap result export now includes SSH host fingerprint for downstream automation.
-- CLI auto-writes a bootstrap result file to `tmp/` by default (configurable).
+- Bootstrap result export includes SSH host fingerprint for downstream automation.
+- Optional CLI flag writes a normalized bootstrap contract.
 
 Notes:
 - Bootstrap result enables strict host key verification in downstream tools (no prompt required).
