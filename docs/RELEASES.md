@@ -8,6 +8,14 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.10 (2026-02-26)
+
+Highlights:
+- Destructive confirmations now default to No (`[y/N]`) and are highlighted in red.
+
+Notes:
+- Applied to overwrite/delete/cleanup prompts in `config`, `create`, and `smoke` flows.
+
 ## v0.1.9 (2026-02-26)
 
 Highlights:
