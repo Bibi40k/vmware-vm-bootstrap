@@ -45,4 +45,4 @@ iso:
 
 output:
   enable: true
-  bootstrap_result_path: tmp/bootstrap-result.{vm}.yaml  # Auto-write bootstrap result (CLI only)
+  bootstrap_result_path: tmp/bootstrap-result.{vm}.yaml  # Write a machine-readable output for downstream automation (IP, SSH user, port, fingerprint)
