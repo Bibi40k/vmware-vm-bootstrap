@@ -225,16 +225,22 @@ func selectVMConfig(title, prompt string) (string, string, error) {
 	options := append([]string{}, labels...)
 	options = append(options, "Exit")
 
-	fmt.Println()
-	fmt.Println(title)
-	fmt.Println(strings.Repeat("─", 50))
-	fmt.Println()
-
-	selected := interactiveSelectWithExit(options, labels[0], prompt)
-	fmt.Println()
-	if selected == "Exit" {
+	fmt.Printf("\n%s\n%s\n", title, strings.Repeat("─", 50))
+	var selected string
+	if err := survey.AskOne(&survey.Select{
+		Message: prompt,
+		Options: options,
+		Default: labels[0],
+	}, &selected); err != nil {
 		return "", "", nil
 	}
+	// Clear delayed terminal control responses left by survey rendering.
+	drainStdin()
+	if selected == "Exit" {
+		fmt.Println()
+		return "", "", nil
+	}
+	fmt.Println()
 
 	var selectedPath string
 	for i, label := range labels {
