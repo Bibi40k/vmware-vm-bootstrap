@@ -8,6 +8,14 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.8 (2026-02-26)
+
+Highlights:
+- VM bootstrap menu now uses the same interactive selector style as config manager.
+
+Notes:
+- Fixes selector UI alignment issues in some terminals.
+
 ## v0.1.7 (2026-02-26)
 
 Highlights:
