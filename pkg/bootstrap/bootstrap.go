@@ -604,7 +604,10 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 	ticker := time.NewTicker(configs.Defaults.Timeouts.Polling())
 	defer ticker.Stop()
 
+	started := time.Now()
 	deadline := time.Now().Add(timeout)
+	lastHeartbeat := started
+	heartbeatEvery := 20 * time.Second
 
 	toolsWasRunning := false
 	rebootDetected := false
@@ -624,14 +627,38 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 
 			var moVM mo.VirtualMachine
 			if err := vmObj.Properties(ctx, vmObj.Reference(), []string{"guest"}, &moVM); err != nil {
+				if time.Since(lastHeartbeat) >= heartbeatEvery {
+					lastHeartbeat = time.Now()
+					logger.Info("Installation progress",
+						"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
+						"elapsed", time.Since(started).Truncate(time.Second),
+						"remaining", time.Until(deadline).Truncate(time.Second))
+				}
 				continue
 			}
 			if moVM.Guest == nil {
+				if time.Since(lastHeartbeat) >= heartbeatEvery {
+					lastHeartbeat = time.Now()
+					logger.Info("Installation progress",
+						"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
+						"elapsed", time.Since(started).Truncate(time.Second),
+						"remaining", time.Until(deadline).Truncate(time.Second))
+				}
 				continue
 			}
 
 			toolsRunning := moVM.Guest.ToolsRunningStatus == "guestToolsRunning"
 			hostname := moVM.Guest.HostName
+			if time.Since(lastHeartbeat) >= heartbeatEvery {
+				lastHeartbeat = time.Now()
+				logger.Info("Installation progress",
+					"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
+					"elapsed", time.Since(started).Truncate(time.Second),
+					"remaining", time.Until(deadline).Truncate(time.Second),
+					"tools_running", toolsRunning,
+					"hostname", hostname,
+					"hostname_checks", fmt.Sprintf("%d/%d", hostnameCheckCount, requiredHostnameChecks))
+			}
 
 			if !toolsWasRunning && toolsRunning {
 				if !rebootDetected {
@@ -693,6 +720,16 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 			}
 		}
 	}
+}
+
+func currentInstallPhase(toolsWasRunning, rebootDetected bool) string {
+	if !toolsWasRunning && !rebootDetected {
+		return "phase1-wait-tools-start"
+	}
+	if rebootDetected && !toolsWasRunning {
+		return "phase2-wait-reboot"
+	}
+	return "phase3-wait-stable-hostname"
 }
 
 // verifySSHAccess verifies SSH port 22 is accessible.

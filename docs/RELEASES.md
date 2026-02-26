@@ -8,6 +8,14 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.11 (2026-02-26)
+
+Highlights:
+- Added periodic installation heartbeat during long autoinstall waits.
+
+Notes:
+- `waitForInstallation` now logs elapsed/remaining time and current phase to avoid "stuck" perception.
+
 ## v0.1.10 (2026-02-26)
 
 Highlights:
