@@ -8,6 +8,15 @@ Highlights:
 Notes:
 - TBD
 
+## v0.1.12 (2026-02-26)
+
+Highlights:
+- SSH host fingerprint is now computed using `ssh-ed25519` only for deterministic host-key pinning.
+- Installation progress now prints immediately at Phase 1 start and then every 10 seconds.
+
+Notes:
+- Reduces false fingerprint drift between Stage 1 and downstream strict SSH verification.
+
 ## v0.1.11 (2026-02-26)
 
 Highlights:

@@ -607,7 +607,7 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 	started := time.Now()
 	deadline := time.Now().Add(timeout)
 	lastHeartbeat := started
-	heartbeatEvery := 20 * time.Second
+	heartbeatEvery := 10 * time.Second
 
 	toolsWasRunning := false
 	rebootDetected := false
@@ -615,6 +615,13 @@ func waitForInstallation(ctx context.Context, vmObj *object.VirtualMachine, cfg 
 	requiredHostnameChecks := configs.Defaults.Timeouts.HostnameChecks
 
 	logger.Info("Phase 1: Waiting for installation to start (VMware Tools)...")
+	logger.Info("Installation progress",
+		"phase", currentInstallPhase(toolsWasRunning, rebootDetected),
+		"elapsed", 0,
+		"remaining", time.Until(deadline).Truncate(time.Second),
+		"tools_running", false,
+		"hostname", "",
+		"hostname_checks", fmt.Sprintf("%d/%d", hostnameCheckCount, requiredHostnameChecks))
 
 	for {
 		select {

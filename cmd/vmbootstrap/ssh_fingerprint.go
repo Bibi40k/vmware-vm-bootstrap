@@ -17,7 +17,7 @@ func computeSSHHostFingerprint(host string, port int) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	args := []string{"-H", "-p", fmt.Sprintf("%d", port), host}
+	args := []string{"-H", "-t", "ed25519", "-p", fmt.Sprintf("%d", port), host}
 	out, err := exec.CommandContext(ctx, "ssh-keyscan", args...).Output()
 	if err != nil {
 		return "", fmt.Errorf("ssh-keyscan %s:%d: %w", host, port, err)
