@@ -9,6 +9,7 @@ import (
 	"time"
 
 	survey "github.com/AlecAivazis/survey/v2"
+	"golang.org/x/term"
 )
 
 type menuItem struct {
@@ -221,14 +222,19 @@ func selectVMConfig(title, prompt string) (string, string, error) {
 	for i, f := range vmFiles {
 		labels[i] = filepath.Base(f)
 	}
+	options := append([]string{}, labels...)
+	options = append(options, "Exit")
 
 	fmt.Println()
 	fmt.Println(title)
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
 
-	selected := interactiveSelect(labels, labels[0], prompt)
+	selected := interactiveSelectWithExit(options, labels[0], prompt)
 	fmt.Println()
+	if selected == "Exit" {
+		return "", "", nil
+	}
 
 	var selectedPath string
 	for i, label := range labels {
@@ -238,6 +244,114 @@ func selectVMConfig(title, prompt string) (string, string, error) {
 		}
 	}
 	return selectedPath, selected, nil
+}
+
+// interactiveSelectWithExit behaves like interactiveSelect but returns "Exit" on Ctrl+C.
+// This avoids accidental selection when the user tries to cancel.
+func interactiveSelectWithExit(items []string, defaultItem, message string) string {
+	if len(items) == 0 {
+		return defaultItem
+	}
+
+	sel := 0
+	for i, item := range items {
+		if item == defaultItem {
+			sel = i
+			break
+		}
+	}
+
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return selectFromList(items, defaultItem, message)
+	}
+
+	const maxVisible = 10
+	nVis := len(items)
+	if nVis > maxVisible {
+		nVis = maxVisible
+	}
+	offset := 0
+
+	clamp := func() {
+		if sel < offset {
+			offset = sel
+		} else if sel >= offset+nVis {
+			offset = sel - nVis + 1
+		}
+	}
+
+	// Lines rendered: 1 header + nVis items + 1 footer = nVis+2
+	total := nVis + 2
+
+	draw := func(initial bool) {
+		if !initial {
+			fmt.Printf("\033[%dA", total)
+		}
+		clamp()
+		fmt.Printf("\r  \033[1m%s\033[0m\033[K\r\n", message)
+		for i := offset; i < offset+nVis; i++ {
+			if i == sel {
+				fmt.Printf("\r  \033[36m❯ %s\033[0m\033[K\r\n", items[i])
+			} else {
+				fmt.Printf("\r    %s\033[K\r\n", items[i])
+			}
+		}
+		if len(items) > nVis {
+			fmt.Printf("\r  \033[2m%d/%d · ↑↓ arrows · Enter\033[0m\033[K\r\n", sel+1, len(items))
+		} else {
+			fmt.Printf("\r  \033[2m↑↓ arrows · Enter\033[0m\033[K\r\n")
+		}
+	}
+
+	draw(true)
+
+	buf := make([]byte, 8)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil || n == 0 {
+			break
+		}
+		if n == 1 {
+			switch buf[0] {
+			case '\r', '\n':
+				result := items[sel]
+				_ = term.Restore(fd, oldState)
+				stdinReader.Reset(os.Stdin)
+				fmt.Printf("\033[%dA", total)
+				fmt.Printf("\r  \033[32m❯\033[0m %s \033[36m%s\033[0m\r\n", message, result)
+				fmt.Printf("\033[J")
+				return result
+			case 3:
+				_ = term.Restore(fd, oldState)
+				stdinReader.Reset(os.Stdin)
+				fmt.Printf("\r\n")
+				return "Exit"
+			}
+		} else if n >= 3 && buf[0] == '\033' && buf[1] == '[' {
+			switch buf[2] {
+			case 'A':
+				if sel > 0 {
+					sel--
+				} else {
+					sel = len(items) - 1
+				}
+				draw(false)
+			case 'B':
+				if sel < len(items)-1 {
+					sel++
+				} else {
+					sel = 0
+				}
+				draw(false)
+			}
+		}
+	}
+
+	_ = term.Restore(fd, oldState)
+	stdinReader.Reset(os.Stdin)
+	return items[sel]
 }
 
 func checkRequiredFiles() []string {

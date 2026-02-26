@@ -272,6 +272,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		Timezone:          cfg.Timezone,
 		KeyboardLayout:    configs.Defaults.CloudInit.KeyboardLayout,
 		SwapSize:          swapSize,
+		SwapSizeGB:        swapSizeGB,
 		Packages:          configs.Defaults.CloudInit.Packages,
 		UserGroups:        configs.Defaults.CloudInit.UserGroups,
 		UserShell:         configs.Defaults.CloudInit.UserShell,

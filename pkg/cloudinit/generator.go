@@ -38,6 +38,7 @@ type UserDataInput struct {
 	Timezone         string   // e.g., "UTC"
 	KeyboardLayout   string   // e.g., "us"
 	SwapSize         string   // e.g., "2G", "4G" - used in explicit storage config
+	SwapSizeGB       int      // 0 disables swap partition
 	Packages         []string // e.g., ["open-vm-tools", "curl"]
 	UserGroups       string   // e.g., "sudo,adm,dialout"
 	UserShell        string   // e.g., "/bin/bash"

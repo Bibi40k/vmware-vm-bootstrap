@@ -62,10 +62,12 @@ autoinstall:
         device: disk1
         size: 500M
 
+      {{- if gt .SwapSizeGB 0 }}
       - type: partition
         id: swap-partition
         device: disk1
         size: {{ .SwapSize }}
+      {{- end }}
 
       - type: partition
         id: root-partition
@@ -82,10 +84,12 @@ autoinstall:
         volume: boot-partition
         fstype: ext4
 
+      {{- if gt .SwapSizeGB 0 }}
       - type: format
         id: swap-format
         volume: swap-partition
         fstype: swap
+      {{- end }}
 
       - type: format
         id: root-format
@@ -102,10 +106,12 @@ autoinstall:
         device: boot-format
         path: /boot
 
+      {{- if gt .SwapSizeGB 0 }}
       - type: mount
         id: swap-mount
         device: swap-format
         path: none
+      {{- end }}
 
       - type: mount
         id: root-mount

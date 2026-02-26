@@ -38,6 +38,7 @@ func TestGenerateUserData(t *testing.T) {
 		Timezone:       "UTC",
 		KeyboardLayout: "us",
 		SwapSize:       "4G",
+		SwapSizeGB:     4,
 		Packages:       []string{"open-vm-tools", "curl"},
 		UserGroups:     "sudo,adm",
 		UserShell:      "/bin/bash",
@@ -88,6 +89,7 @@ func TestGenerateUserData_NoPasswordHash(t *testing.T) {
 		Timezone:       "UTC",
 		KeyboardLayout: "us",
 		SwapSize:       "2G",
+		SwapSizeGB:     2,
 		Packages:       []string{"open-vm-tools"},
 		UserGroups:     "sudo",
 		UserShell:      "/bin/bash",
@@ -125,6 +127,7 @@ func TestGenerateUserData_WithDataDisk(t *testing.T) {
 		Timezone:          "UTC",
 		KeyboardLayout:    "us",
 		SwapSize:          "2G",
+		SwapSizeGB:        2,
 		Packages:          []string{"open-vm-tools"},
 		UserGroups:        "sudo",
 		UserShell:         "/bin/bash",
@@ -164,6 +167,7 @@ func TestGenerateUserData_AllowPasswordSSH(t *testing.T) {
 		Timezone:         "UTC",
 		KeyboardLayout:   "us",
 		SwapSize:         "2G",
+		SwapSizeGB:       2,
 		Packages:         []string{"open-vm-tools"},
 		UserGroups:       "sudo",
 		UserShell:        "/bin/bash",
@@ -198,6 +202,7 @@ func TestGenerateUserData_EmptyDNSFails(t *testing.T) {
 		Timezone:       "UTC",
 		KeyboardLayout: "us",
 		SwapSize:       "2G",
+		SwapSizeGB:     2,
 		Packages:       []string{"open-vm-tools"},
 		UserGroups:     "sudo",
 		UserShell:      "/bin/bash",
@@ -210,6 +215,43 @@ func TestGenerateUserData_EmptyDNSFails(t *testing.T) {
 	_, err = gen.GenerateUserData(input)
 	if err == nil {
 		t.Fatal("expected error when DNS is empty")
+	}
+}
+
+func TestGenerateUserData_NoSwap(t *testing.T) {
+	gen, err := NewGenerator()
+	if err != nil {
+		t.Fatalf("NewGenerator() failed: %v", err)
+	}
+
+	input := &UserDataInput{
+		Hostname:       "test-vm",
+		Username:       "ubuntu",
+		PasswordHash:   "$6$rounds=5000$salt$hash",
+		SSHPublicKeys:  []string{"ssh-ed25519 AAAA... test@example.com"},
+		Locale:         "en_US.UTF-8",
+		Timezone:       "UTC",
+		KeyboardLayout: "us",
+		SwapSize:       "0G",
+		SwapSizeGB:     0,
+		Packages:       []string{"open-vm-tools"},
+		UserGroups:     "sudo",
+		UserShell:      "/bin/bash",
+		IPAddress:      "192.168.1.10",
+		CIDR:           24,
+		Gateway:        "192.168.1.1",
+		DNS:            []string{"8.8.8.8"},
+	}
+
+	userData, err := gen.GenerateUserData(input)
+	if err != nil {
+		t.Fatalf("GenerateUserData() failed: %v", err)
+	}
+	if strings.Contains(userData, "swap-partition") {
+		t.Error("Expected swap partition to be omitted when swap size is 0")
+	}
+	if strings.Contains(userData, "swap-format") || strings.Contains(userData, "swap-mount") {
+		t.Error("Expected swap format/mount to be omitted when swap size is 0")
 	}
 }
 
