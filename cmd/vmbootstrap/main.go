@@ -84,7 +84,7 @@ func init() {
 	rootCmd.AddCommand(smokeCmd)
 
 	runCmd.Flags().StringVar(&stage1ResultPath, "stage1-result", "",
-		"Write Stage 1 result to YAML/JSON file (optional)")
+		"Write bootstrap result to YAML/JSON file (optional)")
 
 	smokeCmd.Flags().String("config", "", "Path to VM config file (SOPS encrypted)")
 	smokeCmd.Flags().Bool("cleanup", false, "Delete VM after smoke test")

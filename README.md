@@ -119,13 +119,16 @@ Security note:
 
 - SSH password authentication is **disabled by default**. To allow it, set `AllowPasswordSSH=true` and provide `Password` or `PasswordHash`.
 
-## Stage 1 Result (for downstream automation)
+## Bootstrap Result (for downstream automation)
 
-If you want to feed Stage 1 output into another tool (e.g., `talos-devvm-bootstrap`), you can save a normalized result file:
+If you want to feed the bootstrap output into another tool (e.g., `talos-devvm-bootstrap`), you can save a normalized result file:
 
 ```bash
-vmbootstrap run --stage1-result tmp/stage1-result.yaml
+vmbootstrap run --stage1-result tmp/bootstrap-result.yaml
 ```
+
+By default, the CLI writes a bootstrap result to `tmp/bootstrap-result.{vm}.yaml` (see `configs/defaults.yaml`).
+You can disable it by setting `output.enable=false`.
 
 The result includes the VM IP, SSH user/key path, port, and the SSH host fingerprint. This enables strict host key verification in downstream automation without manual prompts.
 - Prefer SSH keys over passwords. Passwords exist in plaintext at runtime (even if stored encrypted at rest).

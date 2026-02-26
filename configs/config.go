@@ -38,6 +38,7 @@ type LibDefaults struct {
 	CloudInit CloudInitDefaults `yaml:"cloudinit"`
 	Timeouts  TimeoutDefaults   `yaml:"timeouts"`
 	ISO       ISODefaults       `yaml:"iso"`
+	Output    OutputDefaults    `yaml:"output"`
 }
 
 // VCenterDefaults holds vCenter connection defaults.
@@ -120,6 +121,12 @@ type ISODefaults struct {
 	UbuntuModifiedSuffix string `yaml:"ubuntu_modified_suffix"`
 	ExtractDirName       string `yaml:"extract_dir_name"`
 	UbuntuVolumeID       string `yaml:"ubuntu_volume_id"`
+}
+
+// OutputDefaults holds CLI output defaults.
+type OutputDefaults struct {
+	Enable           bool   `yaml:"enable"`
+	Stage1ResultPath string `yaml:"stage1_result_path"`
 }
 
 // UbuntuRelease holds download info for a single Ubuntu release.

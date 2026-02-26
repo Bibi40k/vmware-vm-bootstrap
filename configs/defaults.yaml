@@ -16,7 +16,7 @@ cloudinit:
   locale: en_US.UTF-8
   timezone: UTC
   keyboard_layout: us
-  swap_size_gb: 2
+  swap_size_gb: 0
   packages:
     - open-vm-tools
   user_groups: sudo,adm,dialout,cdrom,audio,video,plugdev,users
@@ -42,3 +42,7 @@ iso:
   ubuntu_modified_suffix: -autoinstall  # Suffix added to modified Ubuntu ISO filename
   extract_dir_name: ubuntu-extracted    # Temp directory name for ISO extraction
   ubuntu_volume_id: Ubuntu-AI           # Volume ID for repacked Ubuntu ISO
+
+output:
+  enable: true
+  stage1_result_path: tmp/bootstrap-result.{vm}.yaml  # Auto-write bootstrap result (CLI only)

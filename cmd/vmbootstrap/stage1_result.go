@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 	pkgconfig "github.com/Bibi40k/vmware-vm-bootstrap/pkg/config"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/bootstrap"
 )
@@ -53,4 +54,21 @@ func resolveSSHPrivateKeyPath(path string) string {
 		}
 	}
 	return p
+}
+
+func resolveStage1ResultPath(explicitPath, vmName string) string {
+	path := strings.TrimSpace(explicitPath)
+	if path == "" {
+		if !configs.Defaults.Output.Enable {
+			return ""
+		}
+		path = strings.TrimSpace(configs.Defaults.Output.Stage1ResultPath)
+	}
+	if path == "" {
+		return ""
+	}
+	if strings.Contains(path, "{vm}") {
+		path = strings.ReplaceAll(path, "{vm}", vmName)
+	}
+	return path
 }
