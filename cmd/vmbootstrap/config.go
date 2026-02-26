@@ -630,7 +630,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	}
 
 	if _, err := os.Stat(outputFile); err == nil {
-		if !readYesNo(fmt.Sprintf("%s already exists. Overwrite?", outputFile), false) {
+		if !readYesNoDanger(fmt.Sprintf("%s already exists. Overwrite?", outputFile)) {
 			fmt.Println("  Cancelled.")
 			return nil
 		}
@@ -1462,6 +1462,12 @@ func readYesNo(msg string, defaultYes bool) bool {
 		}
 		fmt.Println("  Enter y or n")
 	}
+}
+
+// readYesNoDanger is for destructive actions.
+// It highlights the prompt in red and defaults to No.
+func readYesNoDanger(msg string) bool {
+	return readYesNo("\033[31m"+msg+"\033[0m", false)
 }
 
 func readPromptLine(prompt string) string {

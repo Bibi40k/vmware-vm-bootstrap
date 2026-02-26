@@ -111,7 +111,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		case "Reuse existing VM":
 			return runSmokeChecksOnly(cfg, v.DataDiskMountPath, v.SwapSizeGB, sshKeyPath, v.SSHPort, cleanup, 0)
 		case "Create new VM (delete existing)":
-			if !readYesNo("Delete existing VM before creating new?", true) {
+			if !readYesNoDanger("Delete existing VM before creating new?") {
 				fmt.Println("  Cancelled.")
 				return nil
 			}
@@ -154,7 +154,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		if ctx.Err() == context.Canceled {
 			if interrupted {
 				if !cleanup {
-					cleanup = readYesNo("Cleanup (delete VM)?", false)
+					cleanup = readYesNoDanger("Cleanup (delete VM)?")
 				}
 				if cleanup {
 					fmt.Println()
@@ -169,7 +169,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		fmt.Printf("  VM may still be running: %s\n", cfg.Name)
 		fmt.Printf("  Inspect with: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, cfg.IPAddress)
 		if !cleanup {
-			cleanup = readYesNo("Cleanup (delete VM)?", false)
+			cleanup = readYesNoDanger("Cleanup (delete VM)?")
 		}
 		if cleanup {
 			fmt.Println()
@@ -307,7 +307,7 @@ func runSmokeChecksOnly(cfg *bootstrap.VMConfig, dataMount string, swapSizeGB in
 	}
 
 	if !cleanup {
-		cleanup = readYesNo("Cleanup (delete VM)?", false)
+		cleanup = readYesNoDanger("Cleanup (delete VM)?")
 	}
 	if cleanup {
 		fmt.Println()

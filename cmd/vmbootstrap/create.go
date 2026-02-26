@@ -152,7 +152,7 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 			fmt.Println("  Cancelled.")
 			return nil
 		}
-		if !readYesNo("Delete existing VM now?", true) {
+		if !readYesNoDanger("Delete existing VM now?") {
 			fmt.Println("  Cancelled.")
 			return nil
 		}
@@ -268,7 +268,7 @@ func printConfigWarnings(dataDiskSizeGB int, dataDiskMountPath string, swapSizeG
 func offerVMCleanup(cfg *bootstrap.VMConfig) {
 	fmt.Printf("\n\033[33m⚠  VM '%s' may be partially created in vCenter.\033[0m\n\n", cfg.Name)
 
-	if !readYesNo(fmt.Sprintf("Delete partial VM '%s' from vCenter?", cfg.Name), true) {
+	if !readYesNoDanger(fmt.Sprintf("Delete partial VM '%s' from vCenter?", cfg.Name)) {
 		fmt.Printf("  VM left in vCenter. Delete manually if needed: %s\n", cfg.Name)
 		return
 	}
