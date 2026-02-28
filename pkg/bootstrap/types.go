@@ -138,10 +138,7 @@ func (cfg *VMConfig) Validate() error {
 	if cfg.DataDiskSizeGB != nil && cfg.DataDiskMountPath == "" {
 		return fmt.Errorf("DataDiskMountPath is required when DataDiskSizeGB is set")
 	}
-	profile := cfg.Profile
-	if profile == "" {
-		profile = "ubuntu"
-	}
+	profile := cfg.effectiveProfile()
 	if profile != "ubuntu" && profile != "talos" {
 		return fmt.Errorf("unsupported Profile %q (supported: ubuntu, talos)", profile)
 	}
@@ -190,6 +187,18 @@ func (cfg *VMConfig) SetDefaults() {
 	}
 }
 
+// EffectiveProfile returns normalized profile name.
+func (cfg *VMConfig) EffectiveProfile() string {
+	return cfg.effectiveProfile()
+}
+
+func (cfg *VMConfig) effectiveProfile() string {
+	if cfg.Profile == "" {
+		return "ubuntu"
+	}
+	return cfg.Profile
+}
+
 // EffectiveUbuntuVersion returns Ubuntu version from profile config.
 func (cfg *VMConfig) EffectiveUbuntuVersion() string {
 	return cfg.effectiveUbuntuVersion()
@@ -204,4 +213,14 @@ func (cfg *VMConfig) EffectiveTalosVersion() string {
 
 func (cfg *VMConfig) effectiveTalosVersion() string {
 	return cfg.Profiles.Talos.Version
+}
+
+// EffectiveOSVersion returns OS version for the selected profile.
+func (cfg *VMConfig) EffectiveOSVersion() string {
+	switch cfg.effectiveProfile() {
+	case "talos":
+		return cfg.effectiveTalosVersion()
+	default:
+		return cfg.effectiveUbuntuVersion()
+	}
 }

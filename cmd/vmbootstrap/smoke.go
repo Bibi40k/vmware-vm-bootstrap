@@ -87,6 +87,8 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		cfg.Profile = "ubuntu"
 	}
 	cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
+	cfg.Profiles.Talos.Version = v.Profiles.Talos.Version
+	cfg.Profiles.Talos.SchematicID = v.Profiles.Talos.SchematicID
 
 	if v.DataDiskSizeGB > 0 {
 		size := v.DataDiskSizeGB

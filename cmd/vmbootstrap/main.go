@@ -20,7 +20,7 @@ var mainSigCh = make(chan os.Signal, 1)
 
 var rootCmd = &cobra.Command{
 	Use:           "vmbootstrap",
-	Short:         "Manage and bootstrap Ubuntu VMs in VMware vCenter",
+	Short:         "Manage and bootstrap OS-profile VMs in VMware vCenter",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {

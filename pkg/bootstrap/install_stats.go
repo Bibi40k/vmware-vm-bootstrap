@@ -25,11 +25,15 @@ type installProfile struct {
 }
 
 func installStatsKey(cfg *VMConfig) string {
-	ubuntu := strings.TrimSpace(cfg.EffectiveUbuntuVersion())
-	if ubuntu == "" {
-		ubuntu = "unknown"
+	profile := strings.TrimSpace(cfg.EffectiveProfile())
+	if profile == "" {
+		profile = "unknown"
 	}
-	return fmt.Sprintf("ubuntu-%s_cpu-%d_mem-%d", ubuntu, cfg.CPUs, cfg.MemoryMB)
+	version := strings.TrimSpace(cfg.EffectiveOSVersion())
+	if version == "" {
+		version = "unknown"
+	}
+	return fmt.Sprintf("%s-%s_cpu-%d_mem-%d", profile, version, cfg.CPUs, cfg.MemoryMB)
 }
 
 func loadInstallDurationEstimate(cfg *VMConfig) (time.Duration, int) {

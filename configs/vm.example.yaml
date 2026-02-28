@@ -10,6 +10,9 @@ vm:
   profiles:
     ubuntu:
       version: "24.04"
+    # talos:
+    #   version: "v1.12.0"
+    #   schematic_id: ""
   username: "sysadmin"
   ssh_key_path: "~/.ssh/id_ed25519.pub"
   ssh_key: ""

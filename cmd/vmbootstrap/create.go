@@ -45,6 +45,10 @@ type vmFileConfig struct {
 			Ubuntu struct {
 				Version string `yaml:"version,omitempty"`
 			} `yaml:"ubuntu,omitempty"`
+			Talos struct {
+				Version     string `yaml:"version,omitempty"`
+				SchematicID string `yaml:"schematic_id,omitempty"`
+			} `yaml:"talos,omitempty"`
 		} `yaml:"profiles,omitempty"`
 	} `yaml:"vm"`
 }
@@ -132,6 +136,8 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		cfg.Profile = "ubuntu"
 	}
 	cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
+	cfg.Profiles.Talos.Version = v.Profiles.Talos.Version
+	cfg.Profiles.Talos.SchematicID = v.Profiles.Talos.SchematicID
 
 	// If VM already exists, warn and offer options.
 	if exists, err := vmExists(cfg); err == nil && exists {
@@ -140,11 +146,13 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 			if cleanupKey != nil {
 				defer cleanupKey()
 			}
-			if currentVer, err := detectUbuntuVersion(cfg.Username, cfg.IPAddress, keyPath, v.SSHPort); err == nil {
-				configUbuntu := cfg.EffectiveUbuntuVersion()
-				if configUbuntu != "" && currentVer != "" && currentVer != configUbuntu {
-					fmt.Printf("\n\033[33m⚠ OS version mismatch: VM=%s, config=%s\033[0m\n", currentVer, configUbuntu)
-					fmt.Println("  Recommended: delete and recreate VM for version changes.")
+			if cfg.EffectiveProfile() == "ubuntu" {
+				if currentVer, err := detectUbuntuVersion(cfg.Username, cfg.IPAddress, keyPath, v.SSHPort); err == nil {
+					configUbuntu := cfg.EffectiveUbuntuVersion()
+					if configUbuntu != "" && currentVer != "" && currentVer != configUbuntu {
+						fmt.Printf("\n\033[33m⚠ OS version mismatch: VM=%s, config=%s\033[0m\n", currentVer, configUbuntu)
+						fmt.Println("  Recommended: delete and recreate VM for version changes.")
+					}
 				}
 			}
 		}

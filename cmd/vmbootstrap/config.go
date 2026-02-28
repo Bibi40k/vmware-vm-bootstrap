@@ -56,6 +56,10 @@ type VMWizardOutput struct {
 			Ubuntu struct {
 				Version string `yaml:"version,omitempty"`
 			} `yaml:"ubuntu,omitempty"`
+			Talos struct {
+				Version     string `yaml:"version,omitempty"`
+				SchematicID string `yaml:"schematic_id,omitempty"`
+			} `yaml:"talos,omitempty"`
 		} `yaml:"profiles,omitempty"`
 	} `yaml:"vm"`
 }
@@ -387,21 +391,17 @@ func editVMConfig(path string) error {
 	v.SwapSizeGB = &swap
 	fmt.Println()
 
-	// === [2] OS Version ===
-	fmt.Println("[2/5] OS Version")
-	ubuntuOptions := buildUbuntuOptions()
-	defaultUbuntu := ubuntuOptions[0]
-	currentUbuntu := v.Profiles.Ubuntu.Version
-	for _, opt := range ubuntuOptions {
-		if strings.HasPrefix(opt, currentUbuntu) {
-			defaultUbuntu = opt
-			break
-		}
+	// === [2] OS Profile ===
+	fmt.Println("[2/5] OS Profile")
+	currentProfile := strOrDefault(v.Profile, "ubuntu")
+	v.Profile = selectOSProfile(currentProfile)
+	switch v.Profile {
+	case "talos":
+		v.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(v.Profiles.Talos.Version, "v1.12.0"))
+		v.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", v.Profiles.Talos.SchematicID)
+	default:
+		selectUbuntuVersion(&v.Profiles.Ubuntu.Version)
 	}
-	var ubuntuChoice string
-	surveySelect(&survey.Select{Message: "Ubuntu version:", Options: ubuntuOptions, Default: defaultUbuntu}, &ubuntuChoice)
-	v.Profiles.Ubuntu.Version = strings.Split(ubuntuChoice, " ")[0]
-	v.Profile = "ubuntu"
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -717,13 +717,16 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	out.VM.SwapSizeGB = &swap
 	fmt.Println()
 
-	// === [2] OS Version ===
-	fmt.Println("[2/5] OS Version")
-	ubuntuOptions := buildUbuntuOptions()
-	var ubuntuChoice string
-	surveySelect(&survey.Select{Message: "Ubuntu version:", Options: ubuntuOptions}, &ubuntuChoice)
-	out.VM.Profiles.Ubuntu.Version = strings.Split(ubuntuChoice, " ")[0]
-	out.VM.Profile = "ubuntu"
+	// === [2] OS Profile ===
+	fmt.Println("[2/5] OS Profile")
+	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
+	switch out.VM.Profile {
+	case "talos":
+		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
+		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
+	default:
+		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
+	}
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -1228,6 +1231,35 @@ func buildUbuntuOptions() []string {
 	return out
 }
 
+func selectOSProfile(defaultProfile string) string {
+	options := []string{"ubuntu", "talos"}
+	var profileChoice string
+	surveySelect(&survey.Select{
+		Message: "OS profile:",
+		Options: options,
+		Default: defaultProfile,
+	}, &profileChoice)
+	return profileChoice
+}
+
+func selectUbuntuVersion(target *string) {
+	ubuntuOptions := buildUbuntuOptions()
+	defaultUbuntu := ubuntuOptions[0]
+	for _, opt := range ubuntuOptions {
+		if strings.HasPrefix(opt, *target) {
+			defaultUbuntu = opt
+			break
+		}
+	}
+	var ubuntuChoice string
+	surveySelect(&survey.Select{
+		Message: "Ubuntu version:",
+		Options: ubuntuOptions,
+		Default: defaultUbuntu,
+	}, &ubuntuChoice)
+	*target = strings.Split(ubuntuChoice, " ")[0]
+}
+
 func autoGateway(ip string) string {
 	parts := strings.Split(ip, ".")
 	if len(parts) == 4 {
@@ -1254,8 +1286,16 @@ func printSummary(out VMWizardOutput) {
 	if v.SwapSizeGB != nil {
 		fmt.Printf("  %-20s %d GB\n", "Swap:", *v.SwapSizeGB)
 	}
-	ubuntuVersion := v.Profiles.Ubuntu.Version
-	fmt.Printf("  %-20s %s\n", "Ubuntu:", ubuntuVersion)
+	fmt.Printf("  %-20s %s\n", "OS profile:", strOrDefault(v.Profile, "ubuntu"))
+	switch v.Profile {
+	case "talos":
+		fmt.Printf("  %-20s %s\n", "Talos:", v.Profiles.Talos.Version)
+		if v.Profiles.Talos.SchematicID != "" {
+			fmt.Printf("  %-20s %s\n", "Schematic ID:", v.Profiles.Talos.SchematicID)
+		}
+	default:
+		fmt.Printf("  %-20s %s\n", "Ubuntu:", v.Profiles.Ubuntu.Version)
+	}
 	fmt.Printf("  %-20s %s\n", "Datastore:", v.Datastore)
 	fmt.Printf("  %-20s %s\n", "Network:", v.NetworkName)
 	if v.NetworkInterface != "" {
