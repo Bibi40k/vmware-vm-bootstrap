@@ -28,6 +28,7 @@ import (
 type VMWizardOutput struct {
 	VM struct {
 		Name              string `yaml:"name"`
+		Profile           string `yaml:"profile,omitempty"`
 		CPUs              int    `yaml:"cpus"`
 		MemoryMB          int    `yaml:"memory_mb"`
 		DiskSizeGB        int    `yaml:"disk_size_gb"`
@@ -52,6 +53,11 @@ type VMWizardOutput struct {
 		Folder            string `yaml:"folder,omitempty"`
 		ResourcePool      string `yaml:"resource_pool,omitempty"`
 		TimeoutMinutes    int    `yaml:"timeout_minutes"`
+		Profiles          struct {
+			Ubuntu struct {
+				Version string `yaml:"version,omitempty"`
+			} `yaml:"ubuntu,omitempty"`
+		} `yaml:"profiles,omitempty"`
 	} `yaml:"vm"`
 }
 
@@ -386,8 +392,12 @@ func editVMConfig(path string) error {
 	fmt.Println("[2/5] OS Version")
 	ubuntuOptions := buildUbuntuOptions()
 	defaultUbuntu := ubuntuOptions[0]
+	currentUbuntu := v.UbuntuVersion
+	if currentUbuntu == "" {
+		currentUbuntu = v.Profiles.Ubuntu.Version
+	}
 	for _, opt := range ubuntuOptions {
-		if strings.HasPrefix(opt, v.UbuntuVersion) {
+		if strings.HasPrefix(opt, currentUbuntu) {
 			defaultUbuntu = opt
 			break
 		}
@@ -395,6 +405,8 @@ func editVMConfig(path string) error {
 	var ubuntuChoice string
 	surveySelect(&survey.Select{Message: "Ubuntu version:", Options: ubuntuOptions, Default: defaultUbuntu}, &ubuntuChoice)
 	v.UbuntuVersion = strings.Split(ubuntuChoice, " ")[0]
+	v.Profile = "ubuntu"
+	v.Profiles.Ubuntu.Version = v.UbuntuVersion
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -716,6 +728,8 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	var ubuntuChoice string
 	surveySelect(&survey.Select{Message: "Ubuntu version:", Options: ubuntuOptions}, &ubuntuChoice)
 	out.VM.UbuntuVersion = strings.Split(ubuntuChoice, " ")[0]
+	out.VM.Profile = "ubuntu"
+	out.VM.Profiles.Ubuntu.Version = out.VM.UbuntuVersion
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -1246,7 +1260,11 @@ func printSummary(out VMWizardOutput) {
 	if v.SwapSizeGB != nil {
 		fmt.Printf("  %-20s %d GB\n", "Swap:", *v.SwapSizeGB)
 	}
-	fmt.Printf("  %-20s %s\n", "Ubuntu:", v.UbuntuVersion)
+	ubuntuVersion := v.UbuntuVersion
+	if ubuntuVersion == "" {
+		ubuntuVersion = v.Profiles.Ubuntu.Version
+	}
+	fmt.Printf("  %-20s %s\n", "Ubuntu:", ubuntuVersion)
 	fmt.Printf("  %-20s %s\n", "Datastore:", v.Datastore)
 	fmt.Printf("  %-20s %s\n", "Network:", v.NetworkName)
 	if v.NetworkInterface != "" {

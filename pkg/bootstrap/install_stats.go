@@ -25,7 +25,7 @@ type installProfile struct {
 }
 
 func installStatsKey(cfg *VMConfig) string {
-	ubuntu := strings.TrimSpace(cfg.UbuntuVersion)
+	ubuntu := strings.TrimSpace(cfg.EffectiveUbuntuVersion())
 	if ubuntu == "" {
 		ubuntu = "unknown"
 	}

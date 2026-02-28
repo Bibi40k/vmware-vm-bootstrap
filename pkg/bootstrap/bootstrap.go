@@ -311,7 +311,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 	logger.Info("Cloud-init configs generated")
 
 	// STEP 11: Download Ubuntu ISO
-	ubuntuISOPath, err := isoMgr.DownloadUbuntu(cfg.UbuntuVersion)
+	ubuntuISOPath, err := isoMgr.DownloadUbuntu(cfg.EffectiveUbuntuVersion())
 	if err != nil {
 		return nil, fmt.Errorf("failed to download Ubuntu ISO: %w", err)
 	}

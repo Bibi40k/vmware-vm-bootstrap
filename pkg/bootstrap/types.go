@@ -3,6 +3,7 @@ package bootstrap
 
 import (
 	"fmt"
+
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 	"github.com/Bibi40k/vmware-vm-bootstrap/internal/utils"
 	"github.com/vmware/govmomi/vim25/types"
@@ -41,6 +42,10 @@ type VMConfig struct {
 	ISODatastore string // Datastore for ISO uploads (e.g., "VMwareStorage01"); falls back to Datastore if empty
 
 	// === OS & User Configuration ===
+	// OS profile used for VM provisioning (default: "ubuntu").
+	Profile string
+	// Profile-specific options (Phase 1 keeps Ubuntu as active implementation).
+	Profiles      VMProfiles
 	UbuntuVersion string   // Ubuntu version (e.g., "24.04" - supported: 22.04, 24.04)
 	Username      string   // SSH user to create (e.g., "sysadmin")
 	SSHPublicKeys []string // SSH public keys (one or more)
@@ -58,6 +63,16 @@ type VMConfig struct {
 	Locale     string // System locale (default: "en_US.UTF-8")
 	SwapSizeGB *int   // Swap size in GB (default from configs/defaults.yaml)
 	Firmware   string // Firmware type: "bios" or "efi" (default: "bios")
+}
+
+// VMProfiles contains profile-specific settings.
+type VMProfiles struct {
+	Ubuntu UbuntuProfile
+}
+
+// UbuntuProfile contains Ubuntu-specific settings for profile mode.
+type UbuntuProfile struct {
+	Version string
 }
 
 // VM represents a bootstrapped virtual machine.
@@ -117,8 +132,15 @@ func (cfg *VMConfig) Validate() error {
 	if cfg.DataDiskSizeGB != nil && cfg.DataDiskMountPath == "" {
 		return fmt.Errorf("DataDiskMountPath is required when DataDiskSizeGB is set")
 	}
-	if cfg.UbuntuVersion == "" {
-		return fmt.Errorf("UbuntuVersion is required")
+	profile := cfg.Profile
+	if profile == "" {
+		profile = "ubuntu"
+	}
+	if profile != "ubuntu" {
+		return fmt.Errorf("unsupported Profile %q (supported: ubuntu)", profile)
+	}
+	if cfg.effectiveUbuntuVersion() == "" {
+		return fmt.Errorf("UbuntuVersion is required (or Profiles.Ubuntu.Version)")
 	}
 	if cfg.Datacenter == "" {
 		return fmt.Errorf("datacenter is required")
@@ -139,6 +161,17 @@ func (cfg *VMConfig) Validate() error {
 // SetDefaults sets default values for optional fields from configs/defaults.yaml.
 func (cfg *VMConfig) SetDefaults() {
 	d := configs.Defaults
+	if cfg.Profile == "" {
+		cfg.Profile = "ubuntu"
+	}
+	// Backward compatibility: map legacy UbuntuVersion into profile field.
+	if cfg.Profiles.Ubuntu.Version == "" && cfg.UbuntuVersion != "" {
+		cfg.Profiles.Ubuntu.Version = cfg.UbuntuVersion
+	}
+	// Keep legacy field in sync for older call sites.
+	if cfg.UbuntuVersion == "" && cfg.Profiles.Ubuntu.Version != "" {
+		cfg.UbuntuVersion = cfg.Profiles.Ubuntu.Version
+	}
 	if cfg.VCenterPort == 0 {
 		cfg.VCenterPort = d.VCenter.Port
 	}
@@ -154,4 +187,16 @@ func (cfg *VMConfig) SetDefaults() {
 	if cfg.NetworkInterface == "" {
 		cfg.NetworkInterface = d.Network.Interface
 	}
+}
+
+// EffectiveUbuntuVersion returns Ubuntu version using profile-first fallback.
+func (cfg *VMConfig) EffectiveUbuntuVersion() string {
+	return cfg.effectiveUbuntuVersion()
+}
+
+func (cfg *VMConfig) effectiveUbuntuVersion() string {
+	if cfg.Profiles.Ubuntu.Version != "" {
+		return cfg.Profiles.Ubuntu.Version
+	}
+	return cfg.UbuntuVersion
 }

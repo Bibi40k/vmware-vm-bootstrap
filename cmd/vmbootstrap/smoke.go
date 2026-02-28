@@ -60,6 +60,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		VCenterInsecure: vcCfg.VCenter.Insecure,
 
 		Name:               v.Name,
+		Profile:            v.Profile,
 		CPUs:               v.CPUs,
 		MemoryMB:           v.MemoryMB,
 		DiskSizeGB:         v.DiskSizeGB,
@@ -82,6 +83,15 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		ResourcePool: v.ResourcePool,
 		Datastore:    v.Datastore,
 		ISODatastore: vcCfg.VCenter.ISODatastore,
+	}
+	if cfg.Profile == "" {
+		cfg.Profile = "ubuntu"
+	}
+	if v.Profiles.Ubuntu.Version != "" {
+		cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
+	}
+	if cfg.UbuntuVersion == "" {
+		cfg.UbuntuVersion = cfg.Profiles.Ubuntu.Version
 	}
 
 	if v.DataDiskSizeGB > 0 {

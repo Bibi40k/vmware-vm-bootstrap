@@ -17,6 +17,7 @@ import (
 type vmFileConfig struct {
 	VM struct {
 		Name              string `yaml:"name"`
+		Profile           string `yaml:"profile,omitempty"`
 		CPUs              int    `yaml:"cpus"`
 		MemoryMB          int    `yaml:"memory_mb"`
 		DiskSizeGB        int    `yaml:"disk_size_gb"`
@@ -41,6 +42,11 @@ type vmFileConfig struct {
 		Folder            string `yaml:"folder"`
 		ResourcePool      string `yaml:"resource_pool"`
 		TimeoutMinutes    int    `yaml:"timeout_minutes"`
+		Profiles          struct {
+			Ubuntu struct {
+				Version string `yaml:"version,omitempty"`
+			} `yaml:"ubuntu,omitempty"`
+		} `yaml:"profiles,omitempty"`
 	} `yaml:"vm"`
 }
 
@@ -104,6 +110,7 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		CPUs:             v.CPUs,
 		MemoryMB:         v.MemoryMB,
 		DiskSizeGB:       v.DiskSizeGB,
+		Profile:          v.Profile,
 		UbuntuVersion:    v.UbuntuVersion,
 		Username:         v.Username,
 		SSHPublicKeys:    []string{sshKey},
@@ -123,6 +130,15 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		Datastore:    v.Datastore,
 		ISODatastore: vcCfg.VCenter.ISODatastore,
 	}
+	if cfg.Profile == "" {
+		cfg.Profile = "ubuntu"
+	}
+	if v.Profiles.Ubuntu.Version != "" {
+		cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
+	}
+	if cfg.UbuntuVersion == "" {
+		cfg.UbuntuVersion = cfg.Profiles.Ubuntu.Version
+	}
 
 	// If VM already exists, warn and offer options.
 	if exists, err := vmExists(cfg); err == nil && exists {
@@ -132,8 +148,9 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 				defer cleanupKey()
 			}
 			if currentVer, err := detectUbuntuVersion(cfg.Username, cfg.IPAddress, keyPath, v.SSHPort); err == nil {
-				if cfg.UbuntuVersion != "" && currentVer != "" && currentVer != cfg.UbuntuVersion {
-					fmt.Printf("\n\033[33m⚠ OS version mismatch: VM=%s, config=%s\033[0m\n", currentVer, cfg.UbuntuVersion)
+				configUbuntu := cfg.EffectiveUbuntuVersion()
+				if configUbuntu != "" && currentVer != "" && currentVer != configUbuntu {
+					fmt.Printf("\n\033[33m⚠ OS version mismatch: VM=%s, config=%s\033[0m\n", currentVer, configUbuntu)
 					fmt.Println("  Recommended: delete and recreate VM for version changes.")
 				}
 			}
