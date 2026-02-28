@@ -652,6 +652,18 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		}
 	}
 
+	// OS selector must be the first wizard question for new VM configs.
+	fmt.Println("[1/5] OS Profile")
+	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
+	switch out.VM.Profile {
+	case "talos":
+		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
+		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
+	default:
+		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
+	}
+	fmt.Println()
+
 	stopDraftHandler := startDraftInterruptHandler(outputFile, draftPath, func() ([]byte, bool) {
 		data, err := yaml.Marshal(out)
 		if err != nil {
@@ -692,28 +704,14 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	fmt.Println("\033[32m✓\033[0m")
 	fmt.Println()
 
+	// === [2] VM Specs ===
+	fmt.Println()
+	fmt.Println("[2/5] VM Specs")
 	if out.VM.Name == "" {
 		out.VM.Name = strings.TrimSuffix(filepath.Base(outputFile), ".sops.yaml")
 		out.VM.Name = strings.TrimPrefix(out.VM.Name, "vm.")
 	}
-	vmName := readLine("VM name in vCenter", out.VM.Name)
-	out.VM.Name = vmName
-
-	// === [1] OS Profile ===
-	fmt.Println("[1/5] OS Profile")
-	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
-	switch out.VM.Profile {
-	case "talos":
-		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
-		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
-	default:
-		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
-	}
-	fmt.Println()
-
-	// === [2] VM Specs ===
-	fmt.Println()
-	fmt.Println("[2/5] VM Specs")
+	out.VM.Name = readLine("VM name in vCenter", out.VM.Name)
 
 	defaultCPU := intOrDefault(out.VM.CPUs, 4)
 	out.VM.CPUs = readInt("CPU cores", defaultCPU, 1, 64)
