@@ -92,10 +92,13 @@ func TestValidate_MinimalValidConfig(t *testing.T) {
 		Gateway:         "192.168.1.1",
 		DNS:             []string{"8.8.8.8"},
 		DiskSizeGB:      20,
-		UbuntuVersion:   "24.04",
-		Datacenter:      "DC1",
-		Datastore:       "DS1",
-		NetworkName:     "LAN",
+		Profile:         "ubuntu",
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+		},
+		Datacenter:  "DC1",
+		Datastore:   "DS1",
+		NetworkName: "LAN",
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -135,10 +138,13 @@ func TestValidate_MissingAuthInputs(t *testing.T) {
 		Gateway:         "192.168.1.1",
 		DNS:             []string{"8.8.8.8"},
 		DiskSizeGB:      20,
-		UbuntuVersion:   "24.04",
-		Datacenter:      "DC1",
-		Datastore:       "DS1",
-		NetworkName:     "LAN",
+		Profile:         "ubuntu",
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+		},
+		Datacenter:  "DC1",
+		Datastore:   "DS1",
+		NetworkName: "LAN",
 	}
 
 	if err := cfg.Validate(); err == nil {
@@ -159,10 +165,13 @@ func TestValidate_NetworkErrors(t *testing.T) {
 		Gateway:         "192.168.1.1",
 		DNS:             []string{"8.8.8.8"},
 		DiskSizeGB:      20,
-		UbuntuVersion:   "24.04",
-		Datacenter:      "DC1",
-		Datastore:       "DS1",
-		NetworkName:     "LAN",
+		Profile:         "ubuntu",
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+		},
+		Datacenter:  "DC1",
+		Datastore:   "DS1",
+		NetworkName: "LAN",
 	}
 
 	if err := cfg.Validate(); err == nil {
@@ -183,10 +192,13 @@ func TestValidate_DiskTooSmall(t *testing.T) {
 		Gateway:         "192.168.1.1",
 		DNS:             []string{"8.8.8.8"},
 		DiskSizeGB:      5,
-		UbuntuVersion:   "24.04",
-		Datacenter:      "DC1",
-		Datastore:       "DS1",
-		NetworkName:     "LAN",
+		Profile:         "ubuntu",
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+		},
+		Datacenter:  "DC1",
+		Datastore:   "DS1",
+		NetworkName: "LAN",
 	}
 
 	if err := cfg.Validate(); err == nil {
@@ -197,7 +209,6 @@ func TestValidate_DiskTooSmall(t *testing.T) {
 func TestValidate_TalosProfileRequiresVersion(t *testing.T) {
 	cfg := minimalValidConfigForTests()
 	cfg.Profile = "talos"
-	cfg.UbuntuVersion = ""
 	cfg.Profiles.Ubuntu.Version = ""
 	cfg.Profiles.Talos.Version = ""
 
@@ -209,7 +220,6 @@ func TestValidate_TalosProfileRequiresVersion(t *testing.T) {
 func TestValidate_TalosProfileWithVersion(t *testing.T) {
 	cfg := minimalValidConfigForTests()
 	cfg.Profile = "talos"
-	cfg.UbuntuVersion = ""
 	cfg.Profiles.Ubuntu.Version = ""
 	cfg.Profiles.Talos.Version = "v1.12.0"
 
@@ -231,9 +241,12 @@ func minimalValidConfigForTests() *VMConfig {
 		Gateway:         "192.168.1.1",
 		DNS:             []string{"8.8.8.8"},
 		DiskSizeGB:      20,
-		UbuntuVersion:   "24.04",
-		Datacenter:      "DC1",
-		Datastore:       "DS1",
-		NetworkName:     "LAN",
+		Profile:         "ubuntu",
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+		},
+		Datacenter:  "DC1",
+		Datastore:   "DS1",
+		NetworkName: "LAN",
 	}
 }

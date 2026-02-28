@@ -46,9 +46,12 @@ func minimalConfig() *VMConfig {
 		Folder:          "Production",
 		ResourcePool:    "pool",
 		Datastore:       "SSD01",
-		UbuntuVersion:   "24.04",
-		Username:        "sysadmin",
-		SSHPublicKeys:   []string{"ssh-ed25519 AAAA test"},
+		Profile:         "ubuntu",
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+		},
+		Username:      "sysadmin",
+		SSHPublicKeys: []string{"ssh-ed25519 AAAA test"},
 	}
 }
 

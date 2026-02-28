@@ -64,7 +64,6 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		CPUs:               v.CPUs,
 		MemoryMB:           v.MemoryMB,
 		DiskSizeGB:         v.DiskSizeGB,
-		UbuntuVersion:      v.UbuntuVersion,
 		Username:           v.Username,
 		SSHPublicKeys:      []string{sshKey},
 		Password:           v.Password,
@@ -87,12 +86,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	if cfg.Profile == "" {
 		cfg.Profile = "ubuntu"
 	}
-	if v.Profiles.Ubuntu.Version != "" {
-		cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
-	}
-	if cfg.UbuntuVersion == "" {
-		cfg.UbuntuVersion = cfg.Profiles.Ubuntu.Version
-	}
+	cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
 
 	if v.DataDiskSizeGB > 0 {
 		size := v.DataDiskSizeGB

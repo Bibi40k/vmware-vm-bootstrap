@@ -1,12 +1,15 @@
 vm:
   name: "web-01"
+  profile: "ubuntu"
   cpus: 2
   memory_mb: 4096
   disk_size_gb: 40
   data_disk_size_gb: 100
   data_disk_mount_path: "/data"
   swap_size_gb: 2
-  ubuntu_version: "24.04"
+  profiles:
+    ubuntu:
+      version: "24.04"
   username: "sysadmin"
   ssh_key_path: "~/.ssh/id_ed25519.pub"
   ssh_key: ""

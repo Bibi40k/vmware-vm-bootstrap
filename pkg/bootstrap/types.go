@@ -44,9 +44,8 @@ type VMConfig struct {
 	// === OS & User Configuration ===
 	// OS profile used for VM provisioning (default: "ubuntu").
 	Profile string
-	// Profile-specific options (Phase 1 keeps Ubuntu as active implementation).
+	// Profile-specific options.
 	Profiles      VMProfiles
-	UbuntuVersion string   // Ubuntu version (e.g., "24.04" - supported: 22.04, 24.04)
 	Username      string   // SSH user to create (e.g., "sysadmin")
 	SSHPublicKeys []string // SSH public keys (one or more)
 	Password      string   // Optional plain text password (auto-hashed with bcrypt before use)
@@ -147,7 +146,7 @@ func (cfg *VMConfig) Validate() error {
 		return fmt.Errorf("unsupported Profile %q (supported: ubuntu, talos)", profile)
 	}
 	if profile == "ubuntu" && cfg.effectiveUbuntuVersion() == "" {
-		return fmt.Errorf("UbuntuVersion is required (or Profiles.Ubuntu.Version)")
+		return fmt.Errorf("Profiles.Ubuntu.Version is required for ubuntu profile")
 	}
 	if profile == "talos" && cfg.effectiveTalosVersion() == "" {
 		return fmt.Errorf("Profiles.Talos.Version is required for talos profile")
@@ -174,14 +173,6 @@ func (cfg *VMConfig) SetDefaults() {
 	if cfg.Profile == "" {
 		cfg.Profile = "ubuntu"
 	}
-	// Backward compatibility: map legacy UbuntuVersion into profile field.
-	if cfg.Profiles.Ubuntu.Version == "" && cfg.UbuntuVersion != "" {
-		cfg.Profiles.Ubuntu.Version = cfg.UbuntuVersion
-	}
-	// Keep legacy field in sync for older call sites.
-	if cfg.UbuntuVersion == "" && cfg.Profiles.Ubuntu.Version != "" {
-		cfg.UbuntuVersion = cfg.Profiles.Ubuntu.Version
-	}
 	if cfg.VCenterPort == 0 {
 		cfg.VCenterPort = d.VCenter.Port
 	}
@@ -199,17 +190,12 @@ func (cfg *VMConfig) SetDefaults() {
 	}
 }
 
-// EffectiveUbuntuVersion returns Ubuntu version using profile-first fallback.
+// EffectiveUbuntuVersion returns Ubuntu version from profile config.
 func (cfg *VMConfig) EffectiveUbuntuVersion() string {
 	return cfg.effectiveUbuntuVersion()
 }
 
-func (cfg *VMConfig) effectiveUbuntuVersion() string {
-	if cfg.Profiles.Ubuntu.Version != "" {
-		return cfg.Profiles.Ubuntu.Version
-	}
-	return cfg.UbuntuVersion
-}
+func (cfg *VMConfig) effectiveUbuntuVersion() string { return cfg.Profiles.Ubuntu.Version }
 
 // EffectiveTalosVersion returns Talos version from profile config.
 func (cfg *VMConfig) EffectiveTalosVersion() string {

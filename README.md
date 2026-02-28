@@ -79,9 +79,12 @@ func main() {
         ISODatastore:    "ISO-Storage-01",
 
         // Required OS/user
-        UbuntuVersion:   "24.04",
-        Username:        "sysadmin",
-        SSHPublicKeys:   []string{"ssh-ed25519 AAAA..."},
+        Profile: "ubuntu",
+        Profiles: bootstrap.VMProfiles{
+            Ubuntu: bootstrap.UbuntuProfile{Version: "24.04"},
+        },
+        Username:      "sysadmin",
+        SSHPublicKeys: []string{"ssh-ed25519 AAAA..."},
 
         // Optional auth (use keys OR password OR password hash)
         Password:        "",

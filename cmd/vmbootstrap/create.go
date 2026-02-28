@@ -24,7 +24,6 @@ type vmFileConfig struct {
 		DataDiskSizeGB    int    `yaml:"data_disk_size_gb"`
 		DataDiskMountPath string `yaml:"data_disk_mount_path"`
 		SwapSizeGB        int    `yaml:"swap_size_gb"`
-		UbuntuVersion     string `yaml:"ubuntu_version"`
 		Username          string `yaml:"username"`
 		SSHKeyPath        string `yaml:"ssh_key_path"`
 		SSHKey            string `yaml:"ssh_key"`
@@ -111,7 +110,6 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		MemoryMB:         v.MemoryMB,
 		DiskSizeGB:       v.DiskSizeGB,
 		Profile:          v.Profile,
-		UbuntuVersion:    v.UbuntuVersion,
 		Username:         v.Username,
 		SSHPublicKeys:    []string{sshKey},
 		Password:         v.Password,
@@ -133,12 +131,7 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 	if cfg.Profile == "" {
 		cfg.Profile = "ubuntu"
 	}
-	if v.Profiles.Ubuntu.Version != "" {
-		cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
-	}
-	if cfg.UbuntuVersion == "" {
-		cfg.UbuntuVersion = cfg.Profiles.Ubuntu.Version
-	}
+	cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
 
 	// If VM already exists, warn and offer options.
 	if exists, err := vmExists(cfg); err == nil && exists {

@@ -58,8 +58,11 @@ func main() {
 		Datastore:    "SSD-Storage-01",
 
 		// OS and user configuration
-		UbuntuVersion: "24.04",
-		Username:      "sysadmin",
+		Profile: "ubuntu",
+		Profiles: bootstrap.VMProfiles{
+			Ubuntu: bootstrap.UbuntuProfile{Version: "24.04"},
+		},
+		Username: "sysadmin",
 		SSHPublicKeys: []string{
 			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample... user@host",
 		},

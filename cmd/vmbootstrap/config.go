@@ -35,7 +35,6 @@ type VMWizardOutput struct {
 		DataDiskSizeGB    int    `yaml:"data_disk_size_gb,omitempty"`
 		DataDiskMountPath string `yaml:"data_disk_mount_path,omitempty"`
 		SwapSizeGB        *int   `yaml:"swap_size_gb,omitempty"`
-		UbuntuVersion     string `yaml:"ubuntu_version"`
 		Username          string `yaml:"username"`
 		SSHKeyPath        string `yaml:"ssh_key_path,omitempty"`
 		SSHKey            string `yaml:"ssh_key,omitempty"`
@@ -392,10 +391,7 @@ func editVMConfig(path string) error {
 	fmt.Println("[2/5] OS Version")
 	ubuntuOptions := buildUbuntuOptions()
 	defaultUbuntu := ubuntuOptions[0]
-	currentUbuntu := v.UbuntuVersion
-	if currentUbuntu == "" {
-		currentUbuntu = v.Profiles.Ubuntu.Version
-	}
+	currentUbuntu := v.Profiles.Ubuntu.Version
 	for _, opt := range ubuntuOptions {
 		if strings.HasPrefix(opt, currentUbuntu) {
 			defaultUbuntu = opt
@@ -404,9 +400,8 @@ func editVMConfig(path string) error {
 	}
 	var ubuntuChoice string
 	surveySelect(&survey.Select{Message: "Ubuntu version:", Options: ubuntuOptions, Default: defaultUbuntu}, &ubuntuChoice)
-	v.UbuntuVersion = strings.Split(ubuntuChoice, " ")[0]
+	v.Profiles.Ubuntu.Version = strings.Split(ubuntuChoice, " ")[0]
 	v.Profile = "ubuntu"
-	v.Profiles.Ubuntu.Version = v.UbuntuVersion
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -727,9 +722,8 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	ubuntuOptions := buildUbuntuOptions()
 	var ubuntuChoice string
 	surveySelect(&survey.Select{Message: "Ubuntu version:", Options: ubuntuOptions}, &ubuntuChoice)
-	out.VM.UbuntuVersion = strings.Split(ubuntuChoice, " ")[0]
+	out.VM.Profiles.Ubuntu.Version = strings.Split(ubuntuChoice, " ")[0]
 	out.VM.Profile = "ubuntu"
-	out.VM.Profiles.Ubuntu.Version = out.VM.UbuntuVersion
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -1260,10 +1254,7 @@ func printSummary(out VMWizardOutput) {
 	if v.SwapSizeGB != nil {
 		fmt.Printf("  %-20s %d GB\n", "Swap:", *v.SwapSizeGB)
 	}
-	ubuntuVersion := v.UbuntuVersion
-	if ubuntuVersion == "" {
-		ubuntuVersion = v.Profiles.Ubuntu.Version
-	}
+	ubuntuVersion := v.Profiles.Ubuntu.Version
 	fmt.Printf("  %-20s %s\n", "Ubuntu:", ubuntuVersion)
 	fmt.Printf("  %-20s %s\n", "Datastore:", v.Datastore)
 	fmt.Printf("  %-20s %s\n", "Network:", v.NetworkName)
