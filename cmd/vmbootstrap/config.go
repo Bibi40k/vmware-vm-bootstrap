@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -632,11 +633,27 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		}
 	}
 
+	// OS selector must be the first wizard question for new VM configs.
+	fmt.Println("[1/5] OS Profile")
+	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
+	switch out.VM.Profile {
+	case "talos":
+		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
+		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
+	default:
+		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
+	}
+	fmt.Println()
+
 	if outputFile == "" {
 		// Config file slug
 		var slug string
 		for {
 			slug = strings.TrimSpace(readLine("Config name (e.g. 'vm1' → configs/vm.vm1.sops.yaml)", ""))
+			if wasPromptInterrupted() {
+				fmt.Println("  Cancelled.")
+				return nil
+			}
 			if slug != "" {
 				break
 			}
@@ -651,18 +668,6 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 			return nil
 		}
 	}
-
-	// OS selector must be the first wizard question for new VM configs.
-	fmt.Println("[1/5] OS Profile")
-	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
-	switch out.VM.Profile {
-	case "talos":
-		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
-		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
-	default:
-		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
-	}
-	fmt.Println()
 
 	stopDraftHandler := startDraftInterruptHandler(outputFile, draftPath, func() ([]byte, bool) {
 		data, err := yaml.Marshal(out)
@@ -1452,6 +1457,7 @@ func readFilePath(field, current string) string {
 var stdinReader = bufio.NewReader(os.Stdin)
 var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 var caretEscapeRE = regexp.MustCompile(`\^\[\[[0-9;?]*[ -/]*[@-~]`)
+var promptInterrupted atomic.Bool
 
 // readLine prints "  Field [current]: " and reads a line.
 // Returns current if the user presses Enter without typing anything.
@@ -1535,6 +1541,7 @@ func readYesNoDanger(msg string) bool {
 }
 
 func readPromptLine(prompt string) string {
+	promptInterrupted.Store(false)
 	rl, err := readline.NewEx(&readline.Config{Prompt: prompt})
 	if err == nil {
 		cleanup := func() {
@@ -1549,6 +1556,7 @@ func readPromptLine(prompt string) string {
 		if errors.Is(err, readline.ErrInterrupt) {
 			// Restore terminal before signal handler (it may os.Exit immediately).
 			cleanup()
+			promptInterrupted.Store(true)
 			if p, findErr := os.FindProcess(os.Getpid()); findErr == nil {
 				_ = p.Signal(os.Interrupt)
 			}
@@ -1560,7 +1568,21 @@ func readPromptLine(prompt string) string {
 
 	fmt.Print(prompt)
 	line, _ := stdinReader.ReadString('\n')
+	if strings.ContainsRune(line, '\x03') {
+		promptInterrupted.Store(true)
+		if p, findErr := os.FindProcess(os.Getpid()); findErr == nil {
+			_ = p.Signal(os.Interrupt)
+		}
+	}
 	return sanitizeConsoleInput(line)
+}
+
+func wasPromptInterrupted() bool {
+	if !promptInterrupted.Load() {
+		return false
+	}
+	promptInterrupted.Store(false)
+	return true
 }
 
 func sanitizeConsoleInput(raw string) string {
