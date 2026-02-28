@@ -14,8 +14,6 @@ import (
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter"
 )
 
-const vanillaSchematicID = "376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba"
-
 type ovfImportSpec struct {
 	Name           string `json:"Name,omitempty"`
 	NetworkMapping []struct {
@@ -100,7 +98,7 @@ func CreateTalosNodeFromOVA(ctx context.Context, cfg *VMConfig, logger *slog.Log
 
 	schematicID := strings.TrimSpace(cfg.Profiles.Talos.SchematicID)
 	if schematicID == "" {
-		schematicID = vanillaSchematicID
+		return nil, fmt.Errorf("Profiles.Talos.SchematicID is required")
 	}
 	ovaURL := talosOVAURL(version, schematicID)
 	logger.Info("Deploying Talos OVA", "url", ovaURL, "version", version, "schematic_id", schematicID)

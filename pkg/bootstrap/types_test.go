@@ -222,9 +222,22 @@ func TestValidate_TalosProfileWithVersion(t *testing.T) {
 	cfg.Profile = "talos"
 	cfg.Profiles.Ubuntu.Version = ""
 	cfg.Profiles.Talos.Version = "v1.12.0"
+	cfg.Profiles.Talos.SchematicID = "903b2da78f99adef03cbbd4df6714563823f63218508800751560d3bc3557e40"
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected error for valid talos profile: %v", err)
+	}
+}
+
+func TestValidate_TalosProfileRequiresSchematicID(t *testing.T) {
+	cfg := minimalValidConfigForTests()
+	cfg.Profile = "talos"
+	cfg.Profiles.Ubuntu.Version = ""
+	cfg.Profiles.Talos.Version = "v1.12.0"
+	cfg.Profiles.Talos.SchematicID = ""
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error when talos profile has no schematic id")
 	}
 }
 

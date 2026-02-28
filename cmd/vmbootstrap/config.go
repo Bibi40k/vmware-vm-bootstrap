@@ -377,7 +377,17 @@ func editVMConfig(path string) error {
 	switch v.Profile {
 	case "talos":
 		v.Profiles.Talos.Version = selectTalosVersion(v.Profiles.Talos.Version)
-		v.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", v.Profiles.Talos.SchematicID)
+		for {
+			v.Profiles.Talos.SchematicID = strings.TrimSpace(readLine("Talos schematic ID", v.Profiles.Talos.SchematicID))
+			if wasPromptInterrupted() {
+				fmt.Println("  Cancelled.")
+				return nil
+			}
+			if v.Profiles.Talos.SchematicID != "" {
+				break
+			}
+			fmt.Println("  Talos schematic ID is required")
+		}
 	default:
 		selectUbuntuVersion(&v.Profiles.Ubuntu.Version)
 	}
@@ -639,7 +649,17 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	switch out.VM.Profile {
 	case "talos":
 		out.VM.Profiles.Talos.Version = selectTalosVersion(out.VM.Profiles.Talos.Version)
-		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
+		for {
+			out.VM.Profiles.Talos.SchematicID = strings.TrimSpace(readLine("Talos schematic ID", out.VM.Profiles.Talos.SchematicID))
+			if wasPromptInterrupted() {
+				fmt.Println("  Cancelled.")
+				return nil
+			}
+			if out.VM.Profiles.Talos.SchematicID != "" {
+				break
+			}
+			fmt.Println("  Talos schematic ID is required")
+		}
 	default:
 		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
 	}

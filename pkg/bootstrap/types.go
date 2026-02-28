@@ -150,6 +150,9 @@ func (cfg *VMConfig) Validate() error {
 	if profile == "talos" && cfg.effectiveTalosVersion() == "" {
 		return fmt.Errorf("Profiles.Talos.Version is required for talos profile")
 	}
+	if profile == "talos" && cfg.EffectiveOSSchematicID() == "" {
+		return fmt.Errorf("Profiles.Talos.SchematicID is required for talos profile")
+	}
 	if cfg.Datacenter == "" {
 		return fmt.Errorf("datacenter is required")
 	}
