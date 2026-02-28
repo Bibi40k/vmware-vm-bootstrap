@@ -1603,6 +1603,7 @@ func readPromptLine(prompt string) string {
 		if errors.Is(err, readline.ErrInterrupt) {
 			// Restore terminal before signal handler (it may os.Exit immediately).
 			cleanup()
+			restoreTTYOnExit()
 			promptInterrupted.Store(true)
 			if p, findErr := os.FindProcess(os.Getpid()); findErr == nil {
 				_ = p.Signal(os.Interrupt)

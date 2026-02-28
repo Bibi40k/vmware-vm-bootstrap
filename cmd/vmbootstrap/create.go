@@ -232,7 +232,12 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		}
 	}()
 
-	vm, err := bootstrap.BootstrapWithLogger(ctx, cfg, logger)
+	var vm *bootstrap.VM
+	if cfg.EffectiveProfile() == "talos" {
+		vm, err = bootstrap.CreateTalosNodeFromOVA(ctx, cfg, logger)
+	} else {
+		vm, err = bootstrap.BootstrapWithLogger(ctx, cfg, logger)
+	}
 
 	// Restore global handler before any prompts.
 	signal.Stop(localSigCh)
