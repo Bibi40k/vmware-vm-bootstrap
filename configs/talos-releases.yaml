@@ -1,0 +1,8 @@
+# Talos versions used by vmbootstrap config wizard dropdown.
+# Keep newest first.
+versions:
+  - v1.12.4
+  - v1.12.3
+  - v1.12.2
+  - v1.12.1
+  - v1.10.9

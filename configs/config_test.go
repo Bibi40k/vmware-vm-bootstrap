@@ -91,3 +91,17 @@ func TestUbuntuReleasesLoaded(t *testing.T) {
 		})
 	}
 }
+
+func TestTalosReleasesLoaded(t *testing.T) {
+	if len(TalosReleases.Versions) == 0 {
+		t.Fatal("talos-releases.yaml loaded no versions")
+	}
+	for i, v := range TalosReleases.Versions {
+		if v == "" {
+			t.Fatalf("TalosReleases.Versions[%d] is empty", i)
+		}
+		if v[0] != 'v' {
+			t.Fatalf("Talos version must start with 'v': %q", v)
+		}
+	}
+}

@@ -1,5 +1,5 @@
 // Package configs provides library defaults loaded from embedded YAML files.
-// All hardcoded values live in defaults.yaml and ubuntu-releases.yaml.
+// All hardcoded values live in defaults.yaml and releases YAML files.
 package configs
 
 import (
@@ -15,11 +15,17 @@ var defaultsYAML []byte
 //go:embed ubuntu-releases.yaml
 var releasesYAML []byte
 
+//go:embed talos-releases.yaml
+var talosReleasesYAML []byte
+
 // Defaults holds all library default values (loaded from defaults.yaml at startup).
 var Defaults LibDefaults
 
 // UbuntuReleases holds Ubuntu release download info (loaded from ubuntu-releases.yaml).
 var UbuntuReleases ReleasesConfig
+
+// TalosReleases holds Talos versions for wizard selection (loaded from talos-releases.yaml).
+var TalosReleases TalosReleasesConfig
 
 func init() {
 	if err := yaml.Unmarshal(defaultsYAML, &Defaults); err != nil {
@@ -27,6 +33,9 @@ func init() {
 	}
 	if err := yaml.Unmarshal(releasesYAML, &UbuntuReleases); err != nil {
 		panic("vmware-vm-bootstrap: invalid ubuntu-releases.yaml: " + err.Error())
+	}
+	if err := yaml.Unmarshal(talosReleasesYAML, &TalosReleases); err != nil {
+		panic("vmware-vm-bootstrap: invalid talos-releases.yaml: " + err.Error())
 	}
 }
 
@@ -125,7 +134,7 @@ type ISODefaults struct {
 
 // OutputDefaults holds CLI output defaults.
 type OutputDefaults struct {
-	Enable           bool   `yaml:"enable"`
+	Enable              bool   `yaml:"enable"`
 	BootstrapResultPath string `yaml:"bootstrap_result_path"`
 }
 
@@ -138,4 +147,9 @@ type UbuntuRelease struct {
 // ReleasesConfig holds all known Ubuntu releases.
 type ReleasesConfig struct {
 	Releases map[string]UbuntuRelease `yaml:"releases"`
+}
+
+// TalosReleasesConfig holds Talos versions used by config wizard.
+type TalosReleasesConfig struct {
+	Versions []string `yaml:"versions"`
 }

@@ -3,11 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -1282,64 +1280,29 @@ func selectUbuntuVersion(target *string) {
 	*target = strings.Split(ubuntuChoice, " ")[0]
 }
 
-type githubRelease struct {
-	TagName    string `json:"tag_name"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
-}
-
-func fetchTalosVersions(limit int) ([]string, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
-		"https://api.github.com/repos/siderolabs/talos/releases?per_page=20", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-
-	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("github api status %d", resp.StatusCode)
+func selectTalosVersion(current string) string {
+	defaultVersion := strOrDefault(strings.TrimSpace(current), "v1.12.0")
+	if !strings.HasPrefix(defaultVersion, "v") {
+		defaultVersion = "v" + defaultVersion
 	}
 
-	var releases []githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]struct{})
 	var versions []string
-	for _, r := range releases {
-		if r.Draft || r.Prerelease {
+	seen := map[string]struct{}{}
+	for _, v := range configs.TalosReleases.Versions {
+		v = strings.TrimSpace(v)
+		if v == "" {
 			continue
 		}
-		v := strings.TrimSpace(r.TagName)
 		if !strings.HasPrefix(v, "v") {
-			continue
+			v = "v" + v
 		}
 		if _, ok := seen[v]; ok {
 			continue
 		}
 		seen[v] = struct{}{}
 		versions = append(versions, v)
-		if len(versions) >= limit {
-			break
-		}
 	}
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("no stable talos releases found")
-	}
-	return versions, nil
-}
-
-func selectTalosVersion(current string) string {
-	defaultVersion := strOrDefault(strings.TrimSpace(current), "v1.12.0")
-	versions, err := fetchTalosVersions(5)
-	if err != nil || len(versions) == 0 {
 		return readLine("Talos version (e.g. v1.12.0)", defaultVersion)
 	}
 
