@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	survey "github.com/AlecAivazis/survey/v2"
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 	"gopkg.in/yaml.v3"
 )
@@ -204,8 +205,7 @@ func selectTalosSchematicID(current string) string {
 
 func selectTalosExtensions(catalog, defaults []string) []string {
 	fmt.Println("[2/2] System Extensions")
-	fmt.Println("  Select extension indexes (comma-separated).")
-	fmt.Println("  Enter = defaults, 'all' = all listed.")
+	fmt.Println("  Use Space to toggle, Enter to confirm.")
 
 	ordered := make([]string, 0, len(catalog))
 	seen := map[string]struct{}{}
@@ -221,55 +221,34 @@ func selectTalosExtensions(catalog, defaults []string) []string {
 		ordered = append(ordered, ext)
 	}
 	sort.Strings(ordered)
-	defaultIdx := make([]string, 0, len(defaults))
-	for _, d := range defaults {
-		for i, ext := range ordered {
-			if ext == d {
-				defaultIdx = append(defaultIdx, fmt.Sprintf("%d", i+1))
-				break
-			}
-		}
-	}
-	defaultHint := strings.Join(defaultIdx, ",")
-	if defaultHint == "" {
-		defaultHint = "1"
-	}
-	for i, ext := range ordered {
-		mark := " "
-		if slices.Contains(defaults, ext) {
-			mark = "x"
-		}
-		fmt.Printf("  [%s] %2d. %s\n", mark, i+1, ext)
-	}
 
-	raw := strings.TrimSpace(readLine("Extension indexes", defaultHint))
-	if strings.EqualFold(raw, "all") {
-		raw = ""
-		for i := range ordered {
-			if i > 0 {
-				raw += ","
-			}
-			raw += fmt.Sprintf("%d", i+1)
+	defaultSelected := make([]string, 0, len(defaults))
+	for _, ext := range ordered {
+		if slices.Contains(defaults, ext) {
+			defaultSelected = append(defaultSelected, ext)
 		}
+	}
+	if len(defaultSelected) == 0 && len(ordered) > 0 {
+		defaultSelected = append(defaultSelected, ordered[0])
 	}
 
 	var selected []string
-	if raw == "" {
-		selected = append(selected, defaults...)
-	} else {
-		parts := strings.Split(raw, ",")
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p == "" {
-				continue
+	if err := survey.AskOne(&survey.MultiSelect{
+		Message: "Select extensions:",
+		Options: ordered,
+		Default: defaultSelected,
+		PageSize: func() int {
+			if len(ordered) < 10 {
+				return len(ordered)
 			}
-			idx, err := parseInt(p)
-			if err != nil || idx < 1 || idx > len(ordered) {
-				continue
-			}
-			selected = append(selected, ordered[idx-1])
-		}
+			return 10
+		}(),
+	}, &selected); err != nil {
+		drainStdin()
+		fmt.Println("  Cancelled.")
+		return nil
 	}
+	drainStdin()
 
 	for readYesNo("Add custom extension?", false) {
 		ext := strings.TrimSpace(readLine("Custom extension (e.g. siderolabs/....)", ""))
