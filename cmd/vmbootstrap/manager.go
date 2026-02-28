@@ -103,6 +103,10 @@ func buildMenuItems() []menuItem {
 			action: runTalosConfigWizard,
 		})
 	}
+	items = append(items, menuItem{
+		label:  "[talos]    Generate node vm.* configs",
+		action: runTalosGeneratePrompt,
+	})
 
 	drafts := listDrafts(true)
 	for _, d := range drafts {

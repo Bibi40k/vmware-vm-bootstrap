@@ -18,6 +18,8 @@ var nodeTalosconfig string
 var nodeEndpoint string
 var nodePreserve bool
 var nodeInsecure bool
+var talosPlanConfigPath string
+var talosGenerateForce bool
 
 // mainSigCh receives SIGINT for the default (non-bootstrap) handler.
 // bootstrapVM temporarily stops delivery to this channel so it can handle
@@ -161,6 +163,19 @@ var talosConfigCmd = &cobra.Command{
 	},
 }
 
+var talosGenerateCmd = &cobra.Command{
+	Use:           "generate",
+	Short:         "Generate Talos node vm.* configs from cluster plan",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return runTalosGenerate(talosPlanConfigPath, talosGenerateForce)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
 		"Path to vCenter config file (SOPS encrypted)")
@@ -174,6 +189,7 @@ func init() {
 	nodeCmd.AddCommand(nodeRecreateCmd)
 	nodeCmd.AddCommand(nodeUpdateCmd)
 	talosCmd.AddCommand(talosConfigCmd)
+	talosCmd.AddCommand(talosGenerateCmd)
 
 	runCmd.Flags().StringVar(&bootstrapResultPath, "bootstrap-result", "",
 		"Write bootstrap result to YAML/JSON file (optional)")
@@ -187,6 +203,9 @@ func init() {
 	nodeUpdateCmd.Flags().StringVar(&nodeEndpoint, "endpoint", "", "Talos API endpoint (defaults to vm.ip_address)")
 	nodeUpdateCmd.Flags().BoolVar(&nodePreserve, "preserve", false, "Preserve /var in Talos upgrade")
 	nodeUpdateCmd.Flags().BoolVar(&nodeInsecure, "insecure", false, "Pass --insecure to talosctl")
+
+	talosGenerateCmd.Flags().StringVar(&talosPlanConfigPath, "config", talosClusterPlanDefaultPath, "Path to Talos cluster plan config (SOPS encrypted)")
+	talosGenerateCmd.Flags().BoolVar(&talosGenerateForce, "force", false, "Overwrite existing generated vm.* configs")
 }
 
 func main() {

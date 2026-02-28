@@ -1,0 +1,293 @@
+package main
+
+import (
+	"fmt"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+const talosClusterPlanDefaultPath = "configs/talos.cluster.sops.yaml"
+
+type talosClusterPlanFile struct {
+	Cluster struct {
+		Name    string `yaml:"name"`
+		Network struct {
+			CIDR    string `yaml:"cidr"`
+			StartIP string `yaml:"start_ip"`
+			Gateway string `yaml:"gateway"`
+			DNS     string `yaml:"dns"`
+			DNS2    string `yaml:"dns2,omitempty"`
+		} `yaml:"network"`
+		Defaults struct {
+			Datastore    string `yaml:"datastore,omitempty"`
+			NetworkName  string `yaml:"network_name,omitempty"`
+			Folder       string `yaml:"folder,omitempty"`
+			ResourcePool string `yaml:"resource_pool,omitempty"`
+			TimeoutMins  int    `yaml:"timeout_minutes,omitempty"`
+		} `yaml:"defaults,omitempty"`
+		NodeTypes map[string]talosNodeTypeSpec `yaml:"node_types"`
+		Layout    []talosNodeLayoutSpec        `yaml:"layout"`
+	} `yaml:"cluster"`
+}
+
+type talosNodeTypeSpec struct {
+	CPUs         int    `yaml:"cpus"`
+	MemoryMB     int    `yaml:"memory_mb"`
+	DiskSizeGB   int    `yaml:"disk_size_gb"`
+	Datastore    string `yaml:"datastore,omitempty"`
+	NetworkName  string `yaml:"network_name,omitempty"`
+	Folder       string `yaml:"folder,omitempty"`
+	ResourcePool string `yaml:"resource_pool,omitempty"`
+	TalosVersion string `yaml:"talos_version"`
+	SchematicID  string `yaml:"schematic_id"`
+}
+
+type talosNodeLayoutSpec struct {
+	Type   string `yaml:"type"`
+	Count  int    `yaml:"count"`
+	Prefix string `yaml:"prefix,omitempty"`
+}
+
+func runTalosGeneratePrompt() error {
+	fmt.Printf("\n\033[1mTalos\033[0m — Node Config Generator\n")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	planPath := strings.TrimSpace(readLine("Plan config", talosClusterPlanDefaultPath))
+	if wasPromptInterrupted() {
+		fmt.Println("  Cancelled.")
+		return nil
+	}
+	force := readYesNoDanger("Overwrite existing generated VM configs?")
+	return runTalosGenerate(planPath, force)
+}
+
+func runTalosGenerate(planPath string, force bool) error {
+	planPath = strings.TrimSpace(planPath)
+	if planPath == "" {
+		planPath = talosClusterPlanDefaultPath
+	}
+	if _, err := os.Stat(planPath); err != nil {
+		return &userError{
+			msg:  fmt.Sprintf("plan config not found: %s", planPath),
+			hint: "Create configs/talos.cluster.sops.yaml (or pass --config).",
+		}
+	}
+
+	raw, err := sopsDecrypt(planPath)
+	if err != nil {
+		return err
+	}
+
+	var plan talosClusterPlanFile
+	if err := yaml.Unmarshal(raw, &plan); err != nil {
+		return fmt.Errorf("parse %s: %w", filepath.Base(planPath), err)
+	}
+
+	clusterName := strings.TrimSpace(plan.Cluster.Name)
+	if clusterName == "" {
+		return fmt.Errorf("cluster.name is required")
+	}
+	cidr := strings.TrimSpace(plan.Cluster.Network.CIDR)
+	startIPRaw := strings.TrimSpace(plan.Cluster.Network.StartIP)
+	gateway := strings.TrimSpace(plan.Cluster.Network.Gateway)
+	dns := strings.TrimSpace(plan.Cluster.Network.DNS)
+	if cidr == "" || startIPRaw == "" || gateway == "" || dns == "" {
+		return fmt.Errorf("cluster.network.{cidr,start_ip,gateway,dns} are required")
+	}
+
+	prefix, err := netip.ParsePrefix(cidr)
+	if err != nil {
+		return fmt.Errorf("invalid cluster.network.cidr %q: %w", cidr, err)
+	}
+	if !prefix.Addr().Is4() {
+		return fmt.Errorf("only IPv4 CIDR is supported (got %q)", cidr)
+	}
+
+	startIP, err := netip.ParseAddr(startIPRaw)
+	if err != nil {
+		return fmt.Errorf("invalid cluster.network.start_ip %q: %w", startIPRaw, err)
+	}
+	if !prefix.Contains(startIP) {
+		return fmt.Errorf("start_ip %s is not in cidr %s", startIP, cidr)
+	}
+
+	if len(plan.Cluster.NodeTypes) == 0 || len(plan.Cluster.Layout) == 0 {
+		return fmt.Errorf("cluster.node_types and cluster.layout are required")
+	}
+
+	netmask := ipv4MaskFromPrefix(prefix.Bits())
+	nextOffset := 0
+	created := 0
+	updated := 0
+
+	fmt.Printf("\n\033[1mGenerate Talos Node Configs\033[0m — %s\n", filepath.Base(planPath))
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Printf("  Cluster:   %s\n", clusterName)
+	fmt.Printf("  CIDR:      %s\n", cidr)
+	fmt.Printf("  Start IP:  %s\n", startIP)
+	fmt.Printf("  Force:     %v\n", force)
+	fmt.Println()
+
+	for _, item := range plan.Cluster.Layout {
+		typ := strings.TrimSpace(item.Type)
+		if typ == "" {
+			return fmt.Errorf("layout item missing type")
+		}
+		if item.Count <= 0 {
+			return fmt.Errorf("layout %q has invalid count %d", typ, item.Count)
+		}
+		spec, ok := plan.Cluster.NodeTypes[typ]
+		if !ok {
+			return fmt.Errorf("layout references unknown node type %q", typ)
+		}
+		if err := validateTalosNodeTypeSpec(typ, spec); err != nil {
+			return err
+		}
+
+		prefixName := strings.TrimSpace(item.Prefix)
+		if prefixName == "" {
+			prefixName = typ
+		}
+
+		for i := 1; i <= item.Count; i++ {
+			ip, err := addIPv4(startIP, nextOffset)
+			if err != nil {
+				return err
+			}
+			if !prefix.Contains(ip) {
+				return fmt.Errorf("generated IP %s escaped CIDR %s", ip, cidr)
+			}
+			nextOffset++
+
+			nodeName := fmt.Sprintf("%s-%s-%02d", clusterName, prefixName, i)
+			outPath := filepath.Join("configs", fmt.Sprintf("vm.%s.sops.yaml", nodeName))
+			_, existedErr := os.Stat(outPath)
+			existed := existedErr == nil
+
+			vmCfg := buildTalosVMWizardOutput(nodeName, ip.String(), netmask, gateway, dns, strings.TrimSpace(plan.Cluster.Network.DNS2), spec, plan.Cluster.Defaults)
+
+			if existed && !force {
+				fmt.Printf("  \033[33m~ skip\033[0m  %s (already exists)\n", filepath.Base(outPath))
+				continue
+			}
+
+			data, err := yaml.Marshal(vmCfg)
+			if err != nil {
+				return fmt.Errorf("marshal %s: %w", outPath, err)
+			}
+			if err := sopsEncrypt(outPath, data); err != nil {
+				return err
+			}
+			if existed {
+				updated++
+				fmt.Printf("  \033[36m↺ update\033[0m %s\n", filepath.Base(outPath))
+			} else {
+				created++
+				fmt.Printf("  \033[32m+ create\033[0m %s\n", filepath.Base(outPath))
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Printf("\033[32m✓ Generated Talos node configs\033[0m\n")
+	fmt.Printf("  Created: %d\n", created)
+	fmt.Printf("  Updated: %d\n", updated)
+	fmt.Printf("  Next IP: %s\n", mustAddIPv4(startIP, nextOffset))
+	return nil
+}
+
+func buildTalosVMWizardOutput(name, ip, netmask, gateway, dns, dns2 string, spec talosNodeTypeSpec, defaults struct {
+	Datastore    string `yaml:"datastore,omitempty"`
+	NetworkName  string `yaml:"network_name,omitempty"`
+	Folder       string `yaml:"folder,omitempty"`
+	ResourcePool string `yaml:"resource_pool,omitempty"`
+	TimeoutMins  int    `yaml:"timeout_minutes,omitempty"`
+}) VMWizardOutput {
+	var out VMWizardOutput
+	out.VM.Name = name
+	out.VM.Profile = "talos"
+	out.VM.CPUs = spec.CPUs
+	out.VM.MemoryMB = spec.MemoryMB
+	out.VM.DiskSizeGB = spec.DiskSizeGB
+	out.VM.IPAddress = ip
+	out.VM.Netmask = netmask
+	out.VM.Gateway = gateway
+	out.VM.DNS = dns
+	out.VM.DNS2 = dns2
+	out.VM.NetworkInterface = "ens192"
+	out.VM.Datastore = firstNonEmpty(spec.Datastore, defaults.Datastore)
+	out.VM.NetworkName = firstNonEmpty(spec.NetworkName, defaults.NetworkName)
+	out.VM.Folder = firstNonEmpty(spec.Folder, defaults.Folder)
+	out.VM.ResourcePool = firstNonEmpty(spec.ResourcePool, defaults.ResourcePool)
+	out.VM.TimeoutMinutes = defaults.TimeoutMins
+	if out.VM.TimeoutMinutes == 0 {
+		out.VM.TimeoutMinutes = 45
+	}
+	out.VM.Profiles.Talos.Version = strings.TrimSpace(spec.TalosVersion)
+	out.VM.Profiles.Talos.SchematicID = strings.TrimSpace(spec.SchematicID)
+	return out
+}
+
+func validateTalosNodeTypeSpec(name string, spec talosNodeTypeSpec) error {
+	if spec.CPUs <= 0 || spec.MemoryMB <= 0 || spec.DiskSizeGB < 10 {
+		return fmt.Errorf("node_type %q has invalid resources (cpus/memory_mb/disk_size_gb)", name)
+	}
+	if strings.TrimSpace(spec.TalosVersion) == "" {
+		return fmt.Errorf("node_type %q missing talos_version", name)
+	}
+	if strings.TrimSpace(spec.SchematicID) == "" {
+		return fmt.Errorf("node_type %q missing schematic_id", name)
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func addIPv4(base netip.Addr, offset int) (netip.Addr, error) {
+	if !base.Is4() {
+		return netip.Addr{}, fmt.Errorf("base IP is not IPv4")
+	}
+	if offset < 0 {
+		return netip.Addr{}, fmt.Errorf("invalid negative offset")
+	}
+	b := base.As4()
+	u := uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+	u += uint32(offset)
+	return netip.AddrFrom4([4]byte{byte(u >> 24), byte(u >> 16), byte(u >> 8), byte(u)}), nil
+}
+
+func mustAddIPv4(base netip.Addr, offset int) string {
+	ip, err := addIPv4(base, offset)
+	if err != nil {
+		return "n/a"
+	}
+	return ip.String()
+}
+
+func ipv4MaskFromPrefix(bits int) string {
+	if bits <= 0 {
+		return "0.0.0.0"
+	}
+	if bits >= 32 {
+		return "255.255.255.255"
+	}
+	mask := ^uint32(0) << (32 - bits)
+	return fmt.Sprintf("%d.%d.%d.%d",
+		byte(mask>>24),
+		byte(mask>>16),
+		byte(mask>>8),
+		byte(mask),
+	)
+}
