@@ -81,8 +81,12 @@ func runTalosConfigWizard() error {
 	if strings.TrimSpace(cfg.Talos.FactoryURL) == "" {
 		cfg.Talos.FactoryURL = configs.TalosExtensions.FactoryURL
 	}
+	defaultName := strings.TrimSpace(cfg.Talos.Default)
+	if defaultName == "" {
+		defaultName = "VMware"
+	}
 
-	name := strings.TrimSpace(readLine("Schematic name", cfg.Talos.Default))
+	name := strings.TrimSpace(readLine("Schematic name", defaultName))
 	if wasPromptInterrupted() {
 		fmt.Println("  Cancelled.")
 		return nil
