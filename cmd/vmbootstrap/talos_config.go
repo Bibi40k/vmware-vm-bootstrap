@@ -208,11 +208,6 @@ func selectTalosSchematicID(current string) string {
 }
 
 func selectTalosExtensions(catalog, recommended, defaults []string) []string {
-	const (
-		showFullListOption  = "---- load full list ----"
-		closeFullListOption = "---- close full list ----"
-	)
-
 	fmt.Println("[2/2] System Extensions")
 	fmt.Println("  Use Space to toggle, Enter to confirm.")
 
@@ -251,19 +246,14 @@ func selectTalosExtensions(catalog, recommended, defaults []string) []string {
 		defaultSelected = append(defaultSelected, recommendedList[0])
 	}
 
-	recommendedOptions := append([]string{}, recommendedList...)
-	if len(ordered) > len(recommendedList) {
-		recommendedOptions = append(recommendedOptions, showFullListOption)
-	}
-
 	var selected []string
 	if err := survey.AskOne(&survey.MultiSelect{
 		Message: "Select recommended extensions:",
-		Options: recommendedOptions,
+		Options: recommendedList,
 		Default: defaultSelected,
 		PageSize: func() int {
-			if len(recommendedOptions) < 10 {
-				return len(recommendedOptions)
+			if len(recommendedList) < 10 {
+				return len(recommendedList)
 			}
 			return 10
 		}(),
@@ -274,32 +264,34 @@ func selectTalosExtensions(catalog, recommended, defaults []string) []string {
 	}
 	drainStdin()
 
-	showFullList := slices.Contains(selected, showFullListOption)
-	selected = slices.DeleteFunc(selected, func(v string) bool { return v == showFullListOption })
-
-	if showFullList {
-		fullDefault := uniqueSorted(selected)
-		fullOptions := append([]string{closeFullListOption}, ordered...)
-		var fullSelected []string
-		if err := survey.AskOne(&survey.MultiSelect{
-			Message: "Select extensions (full list):",
-			Options: fullOptions,
-			Default: fullDefault,
-			PageSize: func() int {
-				if len(fullOptions) < 14 {
-					return len(fullOptions)
-				}
-				return 14
-			}(),
-		}, &fullSelected); err != nil {
+	if len(ordered) > len(recommendedList) {
+		action := interactiveSelect(
+			[]string{"Continue", "Load full extension list"},
+			"Continue",
+			"Next step:",
+		)
+		if action == "Load full extension list" {
+			fullDefault := uniqueSorted(selected)
+			var fullSelected []string
+			if err := survey.AskOne(&survey.MultiSelect{
+				Message: "Select extensions (full list):",
+				Options: ordered,
+				Default: fullDefault,
+				PageSize: func() int {
+					if len(ordered) < 14 {
+						return len(ordered)
+					}
+					return 14
+				}(),
+			}, &fullSelected); err != nil {
+				drainStdin()
+				// ESC/Ctrl+C here should just close full list and keep recommended selection.
+				fmt.Println("  Full list closed.")
+				fullSelected = fullDefault
+			}
 			drainStdin()
-			// ESC/Ctrl+C here should just close full list and keep recommended selection.
-			fmt.Println("  Full list closed.")
-			fullSelected = fullDefault
+			selected = fullSelected
 		}
-		drainStdin()
-		fullSelected = slices.DeleteFunc(fullSelected, func(v string) bool { return v == closeFullListOption })
-		selected = fullSelected
 	}
 
 	for readYesNo("Add custom extension?", false) {
