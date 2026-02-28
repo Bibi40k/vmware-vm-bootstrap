@@ -1,16 +1,89 @@
 # Talos extension catalog used by vmbootstrap schematic wizard.
-# This is local-first (no network call on each run).
+# Local cache snapshot sourced from local docs catalog.
 factory_url: https://factory.talos.dev
 
 # Pre-selected by default for VMware Talos nodes.
 default_extensions:
   - siderolabs/vmtoolsd-guest-agent
 
-# Curated official extension list (can be expanded over time).
+# Official extension catalog (local snapshot; update as needed).
 extensions:
-  - siderolabs/vmtoolsd-guest-agent
-  - siderolabs/iscsi-tools
-  - siderolabs/util-linux-tools
-  - siderolabs/qemu-guest-agent
+  - siderolabs/amazon-ena
+  - siderolabs/amd-ucode
+  - siderolabs/amdgpu
+  - siderolabs/binfmt-misc
+  - siderolabs/bird2
+  - siderolabs/bnx2-bnx2x
+  - siderolabs/btrfs
+  - siderolabs/chelsio-drivers
+  - siderolabs/chelsio-firmware
+  - siderolabs/cloudflared
+  - siderolabs/crun
+  - siderolabs/ctr
+  - siderolabs/drbd
+  - siderolabs/dvb-cx23885
+  - siderolabs/dvb-m88ds3103
+  - siderolabs/ecr-credential-provider
+  - siderolabs/fuse3
+  - siderolabs/gasket-driver
+  - siderolabs/glibc
+  - siderolabs/gpio-pinctrl
+  - siderolabs/gvisor
+  - siderolabs/gvisor-debug
+  - siderolabs/hailort
   - siderolabs/i915
+  - siderolabs/intel-ice-firmware
+  - siderolabs/intel-ucode
+  - siderolabs/iscsi-tools
+  - siderolabs/kata-containers
+  - siderolabs/lldpd
+  - siderolabs/mdadm
+  - siderolabs/mei
+  - siderolabs/mellanox-mstflint
+  - siderolabs/metal-agent
+  - siderolabs/multipath-tools
+  - siderolabs/nebula
+  - siderolabs/netbird
+  - siderolabs/newt
+  - siderolabs/nfs-utils
+  - siderolabs/nfsd
+  - siderolabs/nfsrahead
+  - siderolabs/nonfree-kmod-nvidia-lts
+  - siderolabs/nonfree-kmod-nvidia-production
+  - siderolabs/nut-client
   - siderolabs/nvidia-container-toolkit-lts
+  - siderolabs/nvidia-container-toolkit-production
+  - siderolabs/nvidia-fabricmanager-lts
+  - siderolabs/nvidia-fabricmanager-production
+  - siderolabs/nvidia-gdrdrv-device
+  - siderolabs/nvidia-open-gpu-kernel-modules-lts
+  - siderolabs/nvidia-open-gpu-kernel-modules-production
+  - siderolabs/nvme-cli
+  - siderolabs/panfrost
+  - siderolabs/px-fuse
+  - siderolabs/qemu-guest-agent
+  - siderolabs/qlogic-firmware
+  - siderolabs/realtek-firmware
+  - siderolabs/revpi-firmware
+  - siderolabs/rockchip-rknn
+  - siderolabs/soci-snapshotter
+  - siderolabs/spin
+  - siderolabs/stargz-snapshotter
+  - siderolabs/tailscale
+  - siderolabs/tenstorrent
+  - siderolabs/thunderbolt
+  - siderolabs/trident-iscsi-tools
+  - siderolabs/uinput
+  - siderolabs/usb-audio-drivers
+  - siderolabs/usb-modem-drivers
+  - siderolabs/util-linux-tools
+  - siderolabs/v4l-uvc-drivers
+  - siderolabs/vc4
+  - siderolabs/vmtoolsd-guest-agent
+  - siderolabs/wasmedge
+  - siderolabs/xdma-driver
+  - siderolabs/xe
+  - siderolabs/xen-guest-agent
+  - siderolabs/youki
+  - siderolabs/zerotier
+  - siderolabs/zfs
