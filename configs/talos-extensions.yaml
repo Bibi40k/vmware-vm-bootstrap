@@ -3,6 +3,12 @@
 factory_url: https://factory.talos.dev
 
 # Pre-selected by default for VMware Talos nodes.
+recommended_extensions:
+  - siderolabs/vmtoolsd-guest-agent
+  - siderolabs/iscsi-tools
+  - siderolabs/util-linux-tools
+  - siderolabs/qemu-guest-agent
+
 default_extensions:
   - siderolabs/vmtoolsd-guest-agent
 

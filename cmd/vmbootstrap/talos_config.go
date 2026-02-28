@@ -106,7 +106,11 @@ func runTalosConfigWizard() error {
 		factoryURL = configs.TalosExtensions.FactoryURL
 	}
 
-	selected := selectTalosExtensions(configs.TalosExtensions.Extensions, configs.TalosExtensions.DefaultExtensions)
+	selected := selectTalosExtensions(
+		configs.TalosExtensions.Extensions,
+		configs.TalosExtensions.RecommendedExtensions,
+		configs.TalosExtensions.DefaultExtensions,
+	)
 	if len(selected) == 0 {
 		fmt.Println("  At least one extension is required")
 		return nil
@@ -203,7 +207,7 @@ func selectTalosSchematicID(current string) string {
 	}
 }
 
-func selectTalosExtensions(catalog, defaults []string) []string {
+func selectTalosExtensions(catalog, recommended, defaults []string) []string {
 	fmt.Println("[2/2] System Extensions")
 	fmt.Println("  Use Space to toggle, Enter to confirm.")
 
@@ -222,24 +226,34 @@ func selectTalosExtensions(catalog, defaults []string) []string {
 	}
 	sort.Strings(ordered)
 
-	defaultSelected := make([]string, 0, len(defaults))
+	recommendedList := make([]string, 0, len(recommended))
 	for _, ext := range ordered {
+		if slices.Contains(recommended, ext) {
+			recommendedList = append(recommendedList, ext)
+		}
+	}
+	if len(recommendedList) == 0 {
+		recommendedList = append(recommendedList, ordered...)
+	}
+
+	defaultSelected := make([]string, 0, len(defaults))
+	for _, ext := range recommendedList {
 		if slices.Contains(defaults, ext) {
 			defaultSelected = append(defaultSelected, ext)
 		}
 	}
-	if len(defaultSelected) == 0 && len(ordered) > 0 {
-		defaultSelected = append(defaultSelected, ordered[0])
+	if len(defaultSelected) == 0 && len(recommendedList) > 0 {
+		defaultSelected = append(defaultSelected, recommendedList[0])
 	}
 
 	var selected []string
 	if err := survey.AskOne(&survey.MultiSelect{
-		Message: "Select extensions:",
-		Options: ordered,
+		Message: "Select recommended extensions:",
+		Options: recommendedList,
 		Default: defaultSelected,
 		PageSize: func() int {
-			if len(ordered) < 10 {
-				return len(ordered)
+			if len(recommendedList) < 10 {
+				return len(recommendedList)
 			}
 			return 10
 		}(),
@@ -249,6 +263,28 @@ func selectTalosExtensions(catalog, defaults []string) []string {
 		return nil
 	}
 	drainStdin()
+
+	if len(ordered) > len(recommendedList) && readYesNo("Show full extension list?", false) {
+		fullDefault := uniqueSorted(selected)
+		var fullSelected []string
+		if err := survey.AskOne(&survey.MultiSelect{
+			Message: "Select extensions (full list):",
+			Options: ordered,
+			Default: fullDefault,
+			PageSize: func() int {
+				if len(ordered) < 14 {
+					return len(ordered)
+				}
+				return 14
+			}(),
+		}, &fullSelected); err != nil {
+			drainStdin()
+			fmt.Println("  Cancelled.")
+			return nil
+		}
+		drainStdin()
+		selected = fullSelected
+	}
 
 	for readYesNo("Add custom extension?", false) {
 		ext := strings.TrimSpace(readLine("Custom extension (e.g. siderolabs/....)", ""))

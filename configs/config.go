@@ -165,7 +165,8 @@ type TalosReleasesConfig struct {
 
 // TalosExtensionsConfig holds extension catalog + defaults for schematic wizard.
 type TalosExtensionsConfig struct {
-	FactoryURL        string   `yaml:"factory_url"`
-	DefaultExtensions []string `yaml:"default_extensions"`
-	Extensions        []string `yaml:"extensions"`
+	FactoryURL            string   `yaml:"factory_url"`
+	RecommendedExtensions []string `yaml:"recommended_extensions"`
+	DefaultExtensions     []string `yaml:"default_extensions"`
+	Extensions            []string `yaml:"extensions"`
 }

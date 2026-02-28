@@ -110,6 +110,9 @@ func TestTalosExtensionsLoaded(t *testing.T) {
 	if TalosExtensions.FactoryURL == "" {
 		t.Fatal("talos-extensions.yaml missing factory_url")
 	}
+	if len(TalosExtensions.RecommendedExtensions) == 0 {
+		t.Fatal("talos-extensions.yaml loaded no recommended extensions")
+	}
 	if len(TalosExtensions.DefaultExtensions) == 0 {
 		t.Fatal("talos-extensions.yaml loaded no default extensions")
 	}
