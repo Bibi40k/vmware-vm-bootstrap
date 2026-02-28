@@ -34,7 +34,7 @@ help:
 	@printf "\n$(BOLD)  VM Management$(RESET) $(YELLOW)(requires configs/vcenter.sops.yaml)$(RESET)\n"
 	@printf "    $(GREEN)make config$(RESET)        Interactive config manager (create/edit VM configs)\n"
 	@printf "    $(GREEN)make talos-config$(RESET)  Configure Talos schematics (extensions → schematic ID)\n"
-	@printf "    $(GREEN)make vm-deploy$(RESET)     Select a VM config and bootstrap it\n"
+	@printf "    $(GREEN)make vm-deploy$(RESET)     Select a non-Talos VM config and bootstrap it\n"
 	@printf "    $(GREEN)make smoke$(RESET)         Bootstrap + minimal post-install checks + cleanup\n"
 	@printf "\n$(BOLD)  Node Lifecycle$(RESET)\n"
 	@printf "    $(GREEN)make node-create$(RESET)   Create node from VM config\n"

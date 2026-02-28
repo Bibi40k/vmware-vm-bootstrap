@@ -207,7 +207,7 @@ func resumeDraft(d draftInfo) error {
 }
 
 func runBootstrapSelector() error {
-	selectedPath, selectedLabel, err := selectVMConfig("\033[1mvmbootstrap\033[0m — Bootstrap VM", "Select VM config to bootstrap:")
+	selectedPath, selectedLabel, err := selectNonTalosVMConfig("\033[1mvmbootstrap\033[0m — Bootstrap VM", "Select non-Talos VM config to bootstrap:")
 	if err != nil {
 		return err
 	}
@@ -219,6 +219,57 @@ func runBootstrapSelector() error {
 		return nil
 	}
 	return bootstrapVM(selectedPath, bootstrapResultPath)
+}
+
+func selectNonTalosVMConfig(title, prompt string) (string, string, error) {
+	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
+	var nonTalosPaths []string
+	var nonTalosLabels []string
+	for _, p := range vmFiles {
+		vmFile, err := loadVMConfig(p)
+		if err != nil {
+			continue
+		}
+		profile := strings.TrimSpace(vmFile.VM.Profile)
+		if profile == "" {
+			profile = "ubuntu"
+		}
+		if profile == "talos" {
+			continue
+		}
+		nonTalosPaths = append(nonTalosPaths, p)
+		nonTalosLabels = append(nonTalosLabels, filepath.Base(p))
+	}
+	if len(nonTalosPaths) == 0 {
+		fmt.Println("\n  No non-Talos VM configs found in configs/vm.*.sops.yaml")
+		fmt.Println("  For Talos nodes use: make node-create")
+		return "", "", nil
+	}
+
+	options := append([]string{}, nonTalosLabels...)
+	options = append(options, "Exit")
+
+	fmt.Printf("\n%s\n%s\n", title, strings.Repeat("─", 50))
+	var selected string
+	if err := survey.AskOne(&survey.Select{
+		Message: prompt,
+		Options: options,
+		Default: nonTalosLabels[0],
+	}, &selected); err != nil {
+		return "", "", nil
+	}
+	drainStdin()
+	if selected == "Exit" {
+		fmt.Println()
+		return "", "", nil
+	}
+	fmt.Println()
+	for i, label := range nonTalosLabels {
+		if label == selected {
+			return nonTalosPaths[i], selected, nil
+		}
+	}
+	return "", "", nil
 }
 
 func selectVMConfig(title, prompt string) (string, string, error) {

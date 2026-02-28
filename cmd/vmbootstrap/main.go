@@ -42,7 +42,7 @@ var rootCmd = &cobra.Command{
 
 var runCmd = &cobra.Command{
 	Use:           "run",
-	Short:         "Select a VM config and bootstrap it",
+	Short:         "Select a non-Talos VM config and bootstrap it",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
