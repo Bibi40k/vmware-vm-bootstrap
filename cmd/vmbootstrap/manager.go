@@ -92,6 +92,18 @@ func buildMenuItems() []menuItem {
 		})
 	}
 
+	if _, err := os.Stat(talosSchematicsConfigFile); err == nil {
+		items = append(items, menuItem{
+			label:  "[talos]    Edit talos.schematics.sops.yaml",
+			action: runTalosConfigWizard,
+		})
+	} else {
+		items = append(items, menuItem{
+			label:  "[+talos]   Create talos.schematics.sops.yaml",
+			action: runTalosConfigWizard,
+		})
+	}
+
 	drafts := listDrafts(true)
 	for _, d := range drafts {
 		draft := d

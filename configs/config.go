@@ -18,6 +18,9 @@ var releasesYAML []byte
 //go:embed talos-releases.yaml
 var talosReleasesYAML []byte
 
+//go:embed talos-extensions.yaml
+var talosExtensionsYAML []byte
+
 // Defaults holds all library default values (loaded from defaults.yaml at startup).
 var Defaults LibDefaults
 
@@ -26,6 +29,9 @@ var UbuntuReleases ReleasesConfig
 
 // TalosReleases holds Talos versions for wizard selection (loaded from talos-releases.yaml).
 var TalosReleases TalosReleasesConfig
+
+// TalosExtensions holds extension catalog + defaults for schematic wizard.
+var TalosExtensions TalosExtensionsConfig
 
 func init() {
 	if err := yaml.Unmarshal(defaultsYAML, &Defaults); err != nil {
@@ -36,6 +42,9 @@ func init() {
 	}
 	if err := yaml.Unmarshal(talosReleasesYAML, &TalosReleases); err != nil {
 		panic("vmware-vm-bootstrap: invalid talos-releases.yaml: " + err.Error())
+	}
+	if err := yaml.Unmarshal(talosExtensionsYAML, &TalosExtensions); err != nil {
+		panic("vmware-vm-bootstrap: invalid talos-extensions.yaml: " + err.Error())
 	}
 }
 
@@ -152,4 +161,11 @@ type ReleasesConfig struct {
 // TalosReleasesConfig holds Talos versions used by config wizard.
 type TalosReleasesConfig struct {
 	Versions []string `yaml:"versions"`
+}
+
+// TalosExtensionsConfig holds extension catalog + defaults for schematic wizard.
+type TalosExtensionsConfig struct {
+	FactoryURL        string   `yaml:"factory_url"`
+	DefaultExtensions []string `yaml:"default_extensions"`
+	Extensions        []string `yaml:"extensions"`
 }

@@ -105,3 +105,15 @@ func TestTalosReleasesLoaded(t *testing.T) {
 		}
 	}
 }
+
+func TestTalosExtensionsLoaded(t *testing.T) {
+	if TalosExtensions.FactoryURL == "" {
+		t.Fatal("talos-extensions.yaml missing factory_url")
+	}
+	if len(TalosExtensions.DefaultExtensions) == 0 {
+		t.Fatal("talos-extensions.yaml loaded no default extensions")
+	}
+	if len(TalosExtensions.Extensions) == 0 {
+		t.Fatal("talos-extensions.yaml loaded no extensions")
+	}
+}

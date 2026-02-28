@@ -1,4 +1,4 @@
-.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements vm-deploy run smoke config node-create node-delete node-recreate node-update check-go
+.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements vm-deploy run smoke config talos talos-config node-create node-delete node-recreate node-update check-go
 
 # Auto-download Go toolchain if local version < go.mod requirement
 export GOTOOLCHAIN=auto
@@ -33,6 +33,7 @@ help:
 	@printf "    $(GREEN)make vulncheck$(RESET)     Run govulncheck security scan\n"
 	@printf "\n$(BOLD)  VM Management$(RESET) $(YELLOW)(requires configs/vcenter.sops.yaml)$(RESET)\n"
 	@printf "    $(GREEN)make config$(RESET)        Interactive config manager (create/edit VM configs)\n"
+	@printf "    $(GREEN)make talos-config$(RESET)  Configure Talos schematics (extensions → schematic ID)\n"
 	@printf "    $(GREEN)make vm-deploy$(RESET)     Select a VM config and bootstrap it\n"
 	@printf "    $(GREEN)make smoke$(RESET)         Bootstrap + minimal post-install checks + cleanup\n"
 	@printf "\n$(BOLD)  Node Lifecycle$(RESET)\n"
@@ -226,6 +227,13 @@ node-update: build-cli
 # Interactive config manager (create/edit VM configs)
 config: build-cli
 	@bin/vmbootstrap $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+# Configure Talos image schematics (extensions -> schematic ID)
+talos-config: build-cli
+	@bin/vmbootstrap talos config $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+# Backward-compatible shortcut.
+talos: talos-config
 
 # Install all required external tools
 install-requirements:

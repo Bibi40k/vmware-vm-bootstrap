@@ -1,0 +1,16 @@
+# Talos extension catalog used by vmbootstrap schematic wizard.
+# This is local-first (no network call on each run).
+factory_url: https://factory.talos.dev
+
+# Pre-selected by default for VMware Talos nodes.
+default_extensions:
+  - siderolabs/vmtoolsd-guest-agent
+
+# Curated official extension list (can be expanded over time).
+extensions:
+  - siderolabs/vmtoolsd-guest-agent
+  - siderolabs/iscsi-tools
+  - siderolabs/util-linux-tools
+  - siderolabs/qemu-guest-agent
+  - siderolabs/i915
+  - siderolabs/nvidia-container-toolkit-lts

@@ -141,6 +141,26 @@ var nodeUpdateCmd = &cobra.Command{
 	},
 }
 
+var talosCmd = &cobra.Command{
+	Use:           "talos",
+	Short:         "Talos profile utilities (schematic manager)",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+}
+
+var talosConfigCmd = &cobra.Command{
+	Use:           "config",
+	Short:         "Create/update Talos Image Factory schematics",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return runTalosConfigWizard()
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
 		"Path to vCenter config file (SOPS encrypted)")
@@ -148,10 +168,12 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(smokeCmd)
 	rootCmd.AddCommand(nodeCmd)
+	rootCmd.AddCommand(talosCmd)
 	nodeCmd.AddCommand(nodeCreateCmd)
 	nodeCmd.AddCommand(nodeDeleteCmd)
 	nodeCmd.AddCommand(nodeRecreateCmd)
 	nodeCmd.AddCommand(nodeUpdateCmd)
+	talosCmd.AddCommand(talosConfigCmd)
 
 	runCmd.Flags().StringVar(&bootstrapResultPath, "bootstrap-result", "",
 		"Write bootstrap result to YAML/JSON file (optional)")

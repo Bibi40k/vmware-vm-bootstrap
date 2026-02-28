@@ -378,7 +378,7 @@ func editVMConfig(path string) error {
 	case "talos":
 		v.Profiles.Talos.Version = selectTalosVersion(v.Profiles.Talos.Version)
 		for {
-			v.Profiles.Talos.SchematicID = strings.TrimSpace(readLine("Talos schematic ID", v.Profiles.Talos.SchematicID))
+			v.Profiles.Talos.SchematicID = strings.TrimSpace(selectTalosSchematicID(v.Profiles.Talos.SchematicID))
 			if wasPromptInterrupted() {
 				fmt.Println("  Cancelled.")
 				return nil
@@ -650,7 +650,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	case "talos":
 		out.VM.Profiles.Talos.Version = selectTalosVersion(out.VM.Profiles.Talos.Version)
 		for {
-			out.VM.Profiles.Talos.SchematicID = strings.TrimSpace(readLine("Talos schematic ID", out.VM.Profiles.Talos.SchematicID))
+			out.VM.Profiles.Talos.SchematicID = strings.TrimSpace(selectTalosSchematicID(out.VM.Profiles.Talos.SchematicID))
 			if wasPromptInterrupted() {
 				fmt.Println("  Cancelled.")
 				return nil
