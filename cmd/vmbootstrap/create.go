@@ -84,22 +84,28 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 	}
 
 	v := vmFile.VM
+	profile := strings.TrimSpace(v.Profile)
+	if profile == "" {
+		profile = "ubuntu"
+	}
 	resultPath = resolveBootstrapResultPath(resultPath, v.Name)
 
-	printConfigWarnings(v.DataDiskSizeGB, v.DataDiskMountPath, v.SwapSizeGB, v.SSHKeyPath, v.SSHKey, v.Password, v.SSHPort)
+	printConfigWarnings(profile, v.DataDiskSizeGB, v.DataDiskMountPath, v.SwapSizeGB, v.SSHKeyPath, v.SSHKey, v.Password, v.SSHPort)
 
-	// Load SSH key
+	// Load SSH key (required only for ubuntu profile).
 	var sshKey string
-	if v.SSHKeyPath != "" {
-		data, err := os.ReadFile(v.SSHKeyPath)
-		if err != nil {
-			return fmt.Errorf("failed to read SSH key %s: %w", v.SSHKeyPath, err)
+	if profile == "ubuntu" {
+		if v.SSHKeyPath != "" {
+			data, err := os.ReadFile(v.SSHKeyPath)
+			if err != nil {
+				return fmt.Errorf("failed to read SSH key %s: %w", v.SSHKeyPath, err)
+			}
+			sshKey = strings.TrimSpace(string(data))
+		} else if v.SSHKey != "" {
+			sshKey = v.SSHKey
+		} else {
+			return fmt.Errorf("either vm.ssh_key or vm.ssh_key_path is required for ubuntu profile")
 		}
-		sshKey = strings.TrimSpace(string(data))
-	} else if v.SSHKey != "" {
-		sshKey = v.SSHKey
-	} else {
-		return fmt.Errorf("either vm.ssh_key or vm.ssh_key_path is required")
 	}
 
 	cfg := &bootstrap.VMConfig{
@@ -109,15 +115,11 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		VCenterPort:     vcCfg.VCenter.Port,
 		VCenterInsecure: vcCfg.VCenter.Insecure,
 
-		Name:             v.Name,
-		CPUs:             v.CPUs,
-		MemoryMB:         v.MemoryMB,
-		DiskSizeGB:       v.DiskSizeGB,
-		Profile:          v.Profile,
-		Username:         v.Username,
-		SSHPublicKeys:    []string{sshKey},
-		Password:         v.Password,
-		AllowPasswordSSH: v.AllowPasswordSSH,
+		Name:       v.Name,
+		CPUs:       v.CPUs,
+		MemoryMB:   v.MemoryMB,
+		DiskSizeGB: v.DiskSizeGB,
+		Profile:    profile,
 
 		NetworkName:      v.NetworkName,
 		NetworkInterface: v.NetworkInterface,
@@ -132,8 +134,11 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		Datastore:    v.Datastore,
 		ISODatastore: vcCfg.VCenter.ISODatastore,
 	}
-	if cfg.Profile == "" {
-		cfg.Profile = "ubuntu"
+	if profile == "ubuntu" {
+		cfg.Username = v.Username
+		cfg.SSHPublicKeys = []string{sshKey}
+		cfg.Password = v.Password
+		cfg.AllowPasswordSSH = v.AllowPasswordSSH
 	}
 	cfg.Profiles.Ubuntu.Version = v.Profiles.Ubuntu.Version
 	cfg.Profiles.Talos.Version = v.Profiles.Talos.Version
@@ -247,19 +252,25 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 	fmt.Printf("  Name:      %s\n", vm.Name)
 	fmt.Printf("  IP:        %s\n", vm.IPAddress)
 	fmt.Printf("  SSH ready: %v\n", vm.SSHReady)
-	fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, vm.IPAddress)
+	if profile == "ubuntu" && cfg.Username != "" {
+		fmt.Printf("\n  Connect: \033[36mssh %s@%s\033[0m\n\n", cfg.Username, vm.IPAddress)
+	}
 
 	if resultPath != "" {
-		if err := writeBootstrapResult(resultPath, cfg, v.SSHKeyPath, v.SSHPort, vm); err != nil {
-			return err
+		if profile == "ubuntu" {
+			if err := writeBootstrapResult(resultPath, cfg, v.SSHKeyPath, v.SSHPort, vm); err != nil {
+				return err
+			}
+			fmt.Printf("  Bootstrap result saved: %s\n\n", resultPath)
+		} else {
+			fmt.Printf("  Bootstrap result skipped for profile %q (no SSH bootstrap data)\n\n", profile)
 		}
-		fmt.Printf("  Bootstrap result saved: %s\n\n", resultPath)
 	}
 
 	return nil
 }
 
-func printConfigWarnings(dataDiskSizeGB int, dataDiskMountPath string, swapSizeGB int, sshKeyPath, sshKey, password string, sshPort int) {
+func printConfigWarnings(profile string, dataDiskSizeGB int, dataDiskMountPath string, swapSizeGB int, sshKeyPath, sshKey, password string, sshPort int) {
 	var warnings []string
 	if dataDiskMountPath != "" && dataDiskSizeGB == 0 {
 		warnings = append(warnings, "Data disk mount path is set but data disk size is 0 (no data disk will be created).")
@@ -267,10 +278,10 @@ func printConfigWarnings(dataDiskSizeGB int, dataDiskMountPath string, swapSizeG
 	if swapSizeGB == 0 {
 		warnings = append(warnings, "Swap size is 0 (no swap will be created).")
 	}
-	if sshPort != 0 && sshPort != 22 {
+	if profile == "ubuntu" && sshPort != 0 && sshPort != 22 {
 		warnings = append(warnings, fmt.Sprintf("SSH port is %d (default is 22).", sshPort))
 	}
-	if sshKeyPath == "" && sshKey == "" && password == "" {
+	if profile == "ubuntu" && sshKeyPath == "" && sshKey == "" && password == "" {
 		warnings = append(warnings, "No SSH key or password set (SSH access may fail).")
 	}
 	if len(warnings) > 0 {

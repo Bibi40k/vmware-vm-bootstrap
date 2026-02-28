@@ -369,8 +369,21 @@ func editVMConfig(path string) error {
 
 	v := &cfg.VM
 
-	// === [1] VM Specs ===
-	fmt.Println("[1/5] VM Specs")
+	// === [1] OS Profile ===
+	fmt.Println("[1/5] OS Profile")
+	currentProfile := strOrDefault(v.Profile, "ubuntu")
+	v.Profile = selectOSProfile(currentProfile)
+	switch v.Profile {
+	case "talos":
+		v.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(v.Profiles.Talos.Version, "v1.12.0"))
+		v.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", v.Profiles.Talos.SchematicID)
+	default:
+		selectUbuntuVersion(&v.Profiles.Ubuntu.Version)
+	}
+	fmt.Println()
+
+	// === [2] VM Specs ===
+	fmt.Println("[2/5] VM Specs")
 	v.Name = readLine("VM name", v.Name)
 	v.CPUs = readInt("CPU cores", intOrDefault(v.CPUs, 4), 1, 64)
 	ramGB := intOrDefault(v.MemoryMB/1024, 16)
@@ -389,19 +402,6 @@ func editVMConfig(path string) error {
 	}
 	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
 	v.SwapSizeGB = &swap
-	fmt.Println()
-
-	// === [2] OS Profile ===
-	fmt.Println("[2/5] OS Profile")
-	currentProfile := strOrDefault(v.Profile, "ubuntu")
-	v.Profile = selectOSProfile(currentProfile)
-	switch v.Profile {
-	case "talos":
-		v.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(v.Profiles.Talos.Version, "v1.12.0"))
-		v.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", v.Profiles.Talos.SchematicID)
-	default:
-		selectUbuntuVersion(&v.Profiles.Ubuntu.Version)
-	}
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -446,22 +446,31 @@ func editVMConfig(path string) error {
 	v.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", v.DNS2)
 	fmt.Println()
 
-	// === [5] User & SSH ===
-	fmt.Println("[5/5] User & SSH")
-	v.Username = readLine("Username", strOrDefault(v.Username, "sysadmin"))
-	v.SSHKeyPath = readFilePath("SSH public key file", v.SSHKeyPath)
-	v.SSHPort = readInt("SSH port", intOrDefault(v.SSHPort, 22), 1, 65535)
-	pwStatus := "not set"
-	if v.Password != "" {
-		pwStatus = "set"
-	}
-	if readYesNo(fmt.Sprintf("Change password? (currently %s)", pwStatus), false) {
-		v.Password = readPassword("New password (blank = remove)")
-	}
-	if v.Password != "" {
-		v.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", v.AllowPasswordSSH)
-	} else {
+	// === [5] Access / Node Options ===
+	fmt.Println("[5/5] Access / Node Options")
+	if v.Profile == "talos" {
+		fmt.Println("  Talos profile selected: SSH/bootstrap user settings are not required.")
+		v.Username = ""
+		v.SSHKeyPath = ""
+		v.SSHKey = ""
+		v.Password = ""
 		v.AllowPasswordSSH = false
+	} else {
+		v.Username = readLine("Username", strOrDefault(v.Username, "sysadmin"))
+		v.SSHKeyPath = readFilePath("SSH public key file", v.SSHKeyPath)
+		v.SSHPort = readInt("SSH port", intOrDefault(v.SSHPort, 22), 1, 65535)
+		pwStatus := "not set"
+		if v.Password != "" {
+			pwStatus = "set"
+		}
+		if readYesNo(fmt.Sprintf("Change password? (currently %s)", pwStatus), false) {
+			v.Password = readPassword("New password (blank = remove)")
+		}
+		if v.Password != "" {
+			v.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", v.AllowPasswordSSH)
+		} else {
+			v.AllowPasswordSSH = false
+		}
 	}
 	fmt.Println()
 
@@ -690,9 +699,21 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	vmName := readLine("VM name in vCenter", out.VM.Name)
 	out.VM.Name = vmName
 
-	// === [1] VM Specs ===
+	// === [1] OS Profile ===
+	fmt.Println("[1/5] OS Profile")
+	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
+	switch out.VM.Profile {
+	case "talos":
+		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
+		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
+	default:
+		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
+	}
 	fmt.Println()
-	fmt.Println("[1/5] VM Specs")
+
+	// === [2] VM Specs ===
+	fmt.Println()
+	fmt.Println("[2/5] VM Specs")
 
 	defaultCPU := intOrDefault(out.VM.CPUs, 4)
 	out.VM.CPUs = readInt("CPU cores", defaultCPU, 1, 64)
@@ -715,18 +736,6 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	}
 	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
 	out.VM.SwapSizeGB = &swap
-	fmt.Println()
-
-	// === [2] OS Profile ===
-	fmt.Println("[2/5] OS Profile")
-	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
-	switch out.VM.Profile {
-	case "talos":
-		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
-		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
-	default:
-		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
-	}
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
@@ -776,18 +785,26 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	out.VM.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", out.VM.DNS2)
 	fmt.Println()
 
-	// === [5] User & SSH ===
-	fmt.Println("[5/5] User & SSH")
+	// === [5] Access / Node Options ===
+	fmt.Println("[5/5] Access / Node Options")
+	if out.VM.Profile == "talos" {
+		fmt.Println("  Talos profile selected: SSH/bootstrap user settings are not required.")
+		out.VM.Username = ""
+		out.VM.SSHKeyPath = ""
+		out.VM.SSHKey = ""
+		out.VM.Password = ""
+		out.VM.AllowPasswordSSH = false
+	} else {
+		out.VM.Username = readLine("Username", strOrDefault(out.VM.Username, "sysadmin"))
+		out.VM.SSHKeyPath = readFilePath("SSH public key file", strOrDefault(out.VM.SSHKeyPath, os.ExpandEnv("$HOME/.ssh/id_ed25519.pub")))
+		out.VM.SSHPort = readInt("SSH port", intOrDefault(out.VM.SSHPort, 22), 1, 65535)
 
-	out.VM.Username = readLine("Username", strOrDefault(out.VM.Username, "sysadmin"))
-	out.VM.SSHKeyPath = readFilePath("SSH public key file", strOrDefault(out.VM.SSHKeyPath, os.ExpandEnv("$HOME/.ssh/id_ed25519.pub")))
-	out.VM.SSHPort = readInt("SSH port", intOrDefault(out.VM.SSHPort, 22), 1, 65535)
-
-	if readYesNo("Set password?", true) {
-		out.VM.Password = readPassword("Password")
-	}
-	if out.VM.Password != "" {
-		out.VM.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", false)
+		if readYesNo("Set password?", true) {
+			out.VM.Password = readPassword("Password")
+		}
+		if out.VM.Password != "" {
+			out.VM.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", false)
+		}
 	}
 	fmt.Println()
 

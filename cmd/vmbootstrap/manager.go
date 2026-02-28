@@ -107,22 +107,6 @@ func buildMenuItems() []menuItem {
 
 	if vcenterExists {
 		items = append(items, menuItem{label: "[+vm]      Create new VM", action: runCreateWizard})
-		items = append(items, menuItem{
-			label:  "[node]     Create node (deploy)",
-			action: func() error { return nodeCreate("") },
-		})
-		items = append(items, menuItem{
-			label:  "[node]     Delete node",
-			action: func() error { return nodeDelete("") },
-		})
-		items = append(items, menuItem{
-			label:  "[node]     Recreate node",
-			action: func() error { return nodeRecreate("") },
-		})
-		items = append(items, menuItem{
-			label:  "[node]     Update Talos node",
-			action: func() error { return nodeUpdateTalos("", "", "", "", false, false) },
-		})
 	}
 	items = append(items, menuItem{label: "           Exit", action: nil})
 

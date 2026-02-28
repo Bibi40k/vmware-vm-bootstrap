@@ -38,6 +38,16 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	}
 
 	v := vmFile.VM
+	profile := strings.TrimSpace(v.Profile)
+	if profile == "" {
+		profile = "ubuntu"
+	}
+	if profile != "ubuntu" {
+		return &userError{
+			msg:  fmt.Sprintf("smoke is supported only for ubuntu profile (got %q)", profile),
+			hint: "Use 'make node-create' / 'make node-update' for Talos lifecycle operations.",
+		}
+	}
 
 	// Load SSH key
 	sshKey, err := loadSSHKey(v.SSHKeyPath, v.SSHKey)

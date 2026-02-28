@@ -111,14 +111,20 @@ func (cfg *VMConfig) Validate() error {
 	if cfg.Name == "" {
 		return fmt.Errorf("name is required")
 	}
-	if cfg.Username == "" {
-		return fmt.Errorf("username is required")
+	profile := cfg.effectiveProfile()
+	if profile != "ubuntu" && profile != "talos" {
+		return fmt.Errorf("unsupported Profile %q (supported: ubuntu, talos)", profile)
 	}
-	if len(cfg.SSHPublicKeys) == 0 && cfg.Password == "" && cfg.PasswordHash == "" {
-		return fmt.Errorf("at least one of SSHPublicKeys, Password, or PasswordHash is required")
-	}
-	if cfg.AllowPasswordSSH && cfg.Password == "" && cfg.PasswordHash == "" {
-		return fmt.Errorf("AllowPasswordSSH requires Password or PasswordHash")
+	if profile == "ubuntu" {
+		if cfg.Username == "" {
+			return fmt.Errorf("username is required")
+		}
+		if len(cfg.SSHPublicKeys) == 0 && cfg.Password == "" && cfg.PasswordHash == "" {
+			return fmt.Errorf("at least one of SSHPublicKeys, Password, or PasswordHash is required")
+		}
+		if cfg.AllowPasswordSSH && cfg.Password == "" && cfg.PasswordHash == "" {
+			return fmt.Errorf("AllowPasswordSSH requires Password or PasswordHash")
+		}
 	}
 	if cfg.IPAddress == "" {
 		return fmt.Errorf("IPAddress is required")
@@ -137,10 +143,6 @@ func (cfg *VMConfig) Validate() error {
 	}
 	if cfg.DataDiskSizeGB != nil && cfg.DataDiskMountPath == "" {
 		return fmt.Errorf("DataDiskMountPath is required when DataDiskSizeGB is set")
-	}
-	profile := cfg.effectiveProfile()
-	if profile != "ubuntu" && profile != "talos" {
-		return fmt.Errorf("unsupported Profile %q (supported: ubuntu, talos)", profile)
 	}
 	if profile == "ubuntu" && cfg.effectiveUbuntuVersion() == "" {
 		return fmt.Errorf("Profiles.Ubuntu.Version is required for ubuntu profile")
