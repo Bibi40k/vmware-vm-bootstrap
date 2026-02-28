@@ -12,6 +12,12 @@ import (
 var vcenterConfigFile string
 var debugLogs bool
 var bootstrapResultPath string
+var nodeVMConfigPath string
+var nodeToVersion string
+var nodeTalosconfig string
+var nodeEndpoint string
+var nodePreserve bool
+var nodeInsecure bool
 
 // mainSigCh receives SIGINT for the default (non-bootstrap) handler.
 // bootstrapVM temporarily stops delivery to this channel so it can handle
@@ -76,18 +82,89 @@ var smokeCmd = &cobra.Command{
 	},
 }
 
+var nodeCmd = &cobra.Command{
+	Use:           "node",
+	Short:         "Node lifecycle operations (create/delete/recreate/update)",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+}
+
+var nodeCreateCmd = &cobra.Command{
+	Use:           "create",
+	Short:         "Create node from VM config",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return nodeCreate(nodeVMConfigPath)
+	},
+}
+
+var nodeDeleteCmd = &cobra.Command{
+	Use:           "delete",
+	Short:         "Delete node from VM config",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return nodeDelete(nodeVMConfigPath)
+	},
+}
+
+var nodeRecreateCmd = &cobra.Command{
+	Use:           "recreate",
+	Short:         "Delete and create node from VM config",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return nodeRecreate(nodeVMConfigPath)
+	},
+}
+
+var nodeUpdateCmd = &cobra.Command{
+	Use:           "update",
+	Short:         "Upgrade Talos node OS via talosctl",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := checkRequirements(); err != nil {
+			return err
+		}
+		return nodeUpdateTalos(nodeVMConfigPath, nodeToVersion, nodeTalosconfig, nodeEndpoint, nodePreserve, nodeInsecure)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
 		"Path to vCenter config file (SOPS encrypted)")
 	rootCmd.PersistentFlags().BoolVar(&debugLogs, "debug", false, "Enable debug logging to tmp/vmbootstrap-debug.log")
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(smokeCmd)
+	rootCmd.AddCommand(nodeCmd)
+	nodeCmd.AddCommand(nodeCreateCmd)
+	nodeCmd.AddCommand(nodeDeleteCmd)
+	nodeCmd.AddCommand(nodeRecreateCmd)
+	nodeCmd.AddCommand(nodeUpdateCmd)
 
 	runCmd.Flags().StringVar(&bootstrapResultPath, "bootstrap-result", "",
 		"Write bootstrap result to YAML/JSON file (optional)")
 
 	smokeCmd.Flags().String("config", "", "Path to VM config file (SOPS encrypted)")
 	smokeCmd.Flags().Bool("cleanup", false, "Delete VM after smoke test")
+
+	nodeCmd.PersistentFlags().StringVar(&nodeVMConfigPath, "config", "", "Path to VM config file (SOPS encrypted)")
+	nodeUpdateCmd.Flags().StringVar(&nodeToVersion, "to-version", "", "Talos target version (defaults to vm.profiles.talos.version)")
+	nodeUpdateCmd.Flags().StringVar(&nodeTalosconfig, "talosconfig", "", "Path to talosconfig file (optional)")
+	nodeUpdateCmd.Flags().StringVar(&nodeEndpoint, "endpoint", "", "Talos API endpoint (defaults to vm.ip_address)")
+	nodeUpdateCmd.Flags().BoolVar(&nodePreserve, "preserve", false, "Preserve /var in Talos upgrade")
+	nodeUpdateCmd.Flags().BoolVar(&nodeInsecure, "insecure", false, "Pass --insecure to talosctl")
 }
 
 func main() {

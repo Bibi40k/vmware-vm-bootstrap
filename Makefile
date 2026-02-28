@@ -1,4 +1,4 @@
-.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements vm-deploy run smoke config check-go
+.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements vm-deploy run smoke config node-create node-delete node-recreate node-update check-go
 
 # Auto-download Go toolchain if local version < go.mod requirement
 export GOTOOLCHAIN=auto
@@ -35,6 +35,11 @@ help:
 	@printf "    $(GREEN)make config$(RESET)        Interactive config manager (create/edit VM configs)\n"
 	@printf "    $(GREEN)make vm-deploy$(RESET)     Select a VM config and bootstrap it\n"
 	@printf "    $(GREEN)make smoke$(RESET)         Bootstrap + minimal post-install checks + cleanup\n"
+	@printf "\n$(BOLD)  Node Lifecycle$(RESET)\n"
+	@printf "    $(GREEN)make node-create$(RESET)   Create node from VM config\n"
+	@printf "    $(GREEN)make node-delete$(RESET)   Delete node from VM config\n"
+	@printf "    $(GREEN)make node-recreate$(RESET) Delete + create node from VM config\n"
+	@printf "    $(GREEN)make node-update$(RESET)   Upgrade Talos node OS via talosctl\n"
 	@printf "\n$(BOLD)  Maintenance$(RESET)\n"
 	@printf "    $(GREEN)make clean$(RESET)         Remove build artifacts and caches\n"
 	@printf "    $(GREEN)make deps$(RESET)          Download + tidy dependencies\n"
@@ -204,6 +209,19 @@ run: vm-deploy
 # Smoke test (bootstrap + minimal post-install checks + optional cleanup)
 smoke: build-cli
 	@bin/vmbootstrap smoke $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+# Node lifecycle commands
+node-create: build-cli
+	@bin/vmbootstrap node create $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+node-delete: build-cli
+	@bin/vmbootstrap node delete $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+node-recreate: build-cli
+	@bin/vmbootstrap node recreate $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(DEBUG),--debug,)
+
+node-update: build-cli
+	@bin/vmbootstrap node update $(if $(VM),--config $(VM),) $(if $(VCENTER_CONFIG),--vcenter-config $(VCENTER_CONFIG),) $(if $(VERSION),--to-version $(VERSION),) $(if $(TALOSCONFIG),--talosconfig $(TALOSCONFIG),) $(if $(ENDPOINT),--endpoint $(ENDPOINT),) $(if $(PRESERVE),--preserve,) $(if $(INSECURE),--insecure,) $(if $(DEBUG),--debug,)
 
 # Interactive config manager (create/edit VM configs)
 config: build-cli

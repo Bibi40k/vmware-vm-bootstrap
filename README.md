@@ -6,15 +6,14 @@
 ![Go Version](https://img.shields.io/github/go-mod/go-version/Bibi40k/vmware-vm-bootstrap)
 ![Release](https://img.shields.io/github/v/release/Bibi40k/vmware-vm-bootstrap)
 
-**Go library for automated VM deployment in VMware vSphere with cloud-init.**
-
-Bootstrap complete Ubuntu VMs in vCenter: from bare metal to SSH-ready in minutes.
+**Go library for automated VM lifecycle in VMware vSphere (profile-driven: Ubuntu/Talos).**
 
 ## Features
 
 - Core library in Go (ISO tooling still uses system binaries)
 - VMware vSphere 7.0+ support
-- Ubuntu 22.04/24.04 automated installation
+- OS profile model: Ubuntu and Talos
+- Node lifecycle operations: create/delete/recreate/update
 - Cloud-init configuration (network, users, SSH keys)
 - Password hashing (bcrypt; SHA-512 planned)
 - Context-aware operations (timeout/cancel support)
@@ -185,8 +184,14 @@ Default values (from `configs/defaults.yaml`):
 # Install CLI
 go install github.com/Bibi40k/vmware-vm-bootstrap/cmd/vmbootstrap@latest
 
-# Create VM
-vmbootstrap create --config vm.yaml
+# Bootstrap from a selected config
+vmbootstrap run
+
+# Node lifecycle
+vmbootstrap node create --config configs/vm.node01.sops.yaml
+vmbootstrap node delete --config configs/vm.node01.sops.yaml
+vmbootstrap node recreate --config configs/vm.node01.sops.yaml
+vmbootstrap node update --config configs/vm.node01.sops.yaml --to-version v1.12.0
 ```
 
 Note: The library API consumes an in-memory `bootstrap.VMConfig` and has no SOPS dependency. SOPS is used only by the CLI for encrypted config files.
@@ -219,6 +224,7 @@ CLI (in addition to library requirements):
 - `genisoimage`
 - `xorriso`
 - `sops` (only for encrypted config files)
+- `talosctl` (for `vmbootstrap node update`)
 
 ## Development
 
@@ -250,6 +256,10 @@ VM management (CLI):
 make config   # interactive config wizard
 make vm-deploy  # bootstrap a VM
 make smoke VM=configs/vm.myvm.sops.yaml  # bootstrap + smoke test (+ cleanup)
+make node-create VM=configs/vm.node01.sops.yaml
+make node-delete VM=configs/vm.node01.sops.yaml
+make node-recreate VM=configs/vm.node01.sops.yaml
+make node-update VM=configs/vm.node01.sops.yaml VERSION=v1.12.0
 ```
 
 ## Releases
