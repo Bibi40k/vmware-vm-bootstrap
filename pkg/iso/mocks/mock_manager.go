@@ -37,6 +37,11 @@ func (m *ManagerInterface) UploadAlways(ds *object.Datastore, localPath, remoteP
 	return args.Error(0)
 }
 
+func (m *ManagerInterface) MountSingleISO(vm *object.VirtualMachine, isoPath, label string) error {
+	args := m.Called(vm, isoPath, label)
+	return args.Error(0)
+}
+
 func (m *ManagerInterface) MountISOs(vm *object.VirtualMachine, ubuntuISO, nocloudISO string) error {
 	args := m.Called(vm, ubuntuISO, nocloudISO)
 	return args.Error(0)

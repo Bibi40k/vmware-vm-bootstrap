@@ -224,3 +224,13 @@ func (cfg *VMConfig) EffectiveOSVersion() string {
 		return cfg.effectiveUbuntuVersion()
 	}
 }
+
+// EffectiveOSSchematicID returns schematic/build identifier for selected OS profile.
+func (cfg *VMConfig) EffectiveOSSchematicID() string {
+	switch cfg.effectiveProfile() {
+	case "talos":
+		return cfg.Profiles.Talos.SchematicID
+	default:
+		return ""
+	}
+}

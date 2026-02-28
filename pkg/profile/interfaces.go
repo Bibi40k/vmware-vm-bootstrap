@@ -27,6 +27,7 @@ type Input struct {
 	DataDiskMountPath string
 	SwapSizeGB        *int
 	OSVersion         string
+	OSSchematicID     string
 
 	VCenterHost     string
 	VCenterUsername string

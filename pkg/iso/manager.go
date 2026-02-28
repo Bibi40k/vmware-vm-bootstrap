@@ -593,6 +593,21 @@ func (m *Manager) MountISOs(vm *object.VirtualMachine, ubuntuISO, nocloudISO str
 	return nil
 }
 
+// MountSingleISO mounts one ISO and ensures CD-ROMs are connected.
+func (m *Manager) MountSingleISO(vm *object.VirtualMachine, isoPath, label string) error {
+	if err := m.RemoveAllCDROMs(vm); err != nil {
+		return fmt.Errorf("failed to remove existing CD-ROMs: %w", err)
+	}
+	if err := m.mountSingleISO(vm, isoPath, label); err != nil {
+		return err
+	}
+	if err := m.ConnectAllCDROMs(vm); err != nil {
+		return fmt.Errorf("failed to connect CD-ROMs: %w", err)
+	}
+	fmt.Printf("✅ %s ISO mounted and connected successfully\n", label)
+	return nil
+}
+
 // ConnectAllCDROMs ensures all CD-ROM devices are connected.
 // Matches Python's connect_all_cdroms() behavior.
 func (m *Manager) ConnectAllCDROMs(vm *object.VirtualMachine) error {

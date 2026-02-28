@@ -15,6 +15,7 @@ type ManagerInterface interface {
 	CreateNoCloudISO(userData, metaData, networkConfig, vmName string) (string, error)
 	UploadToDatastore(ds *object.Datastore, localPath, remotePath, vcenterHost, vcenterUser, vcenterPass string, insecure bool) error
 	UploadAlways(ds *object.Datastore, localPath, remotePath, vcenterHost, vcenterUser, vcenterPass string, insecure bool) error
+	MountSingleISO(vm *object.VirtualMachine, isoPath, label string) error
 	MountISOs(vm *object.VirtualMachine, ubuntuISO, nocloudISO string) error
 	RemoveAllCDROMs(vm *object.VirtualMachine) error
 	EnsureCDROMsConnectedAfterBoot(vm *object.VirtualMachine) error

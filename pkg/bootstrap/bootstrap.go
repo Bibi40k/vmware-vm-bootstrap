@@ -71,8 +71,8 @@ func defaultBootstrapper() *bootstrapper {
 // Bootstrap creates and configures a complete VM in vCenter.
 // Returns VM object ONLY after:
 // - VM created in vCenter
-// - Ubuntu installed with cloud-init
-// - User SSH accessible (verified through TCP port 22)
+// - Profile provisioning completed
+// - Optional SSH verification completed (Ubuntu profile)
 func Bootstrap(ctx context.Context, cfg *VMConfig) (*VM, error) {
 	return BootstrapWithLogger(ctx, cfg, defaultLogger)
 }
@@ -132,7 +132,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		return nil, fmt.Errorf("failed to find datastore: %w", err)
 	}
 
-	// isoDatastore is where Ubuntu + NoCloud ISOs are uploaded.
+	// isoDatastore is where profile boot artifacts are uploaded.
 	// Defaults to the VM datastore when ISODatastore is not configured.
 	isoDatastoreName := cfg.ISODatastore
 	if isoDatastoreName == "" {
@@ -257,6 +257,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		DataDiskMountPath: cfg.DataDiskMountPath,
 		SwapSizeGB:        cfg.SwapSizeGB,
 		OSVersion:         cfg.EffectiveOSVersion(),
+		OSSchematicID:     cfg.EffectiveOSSchematicID(),
 		VCenterHost:       cfg.VCenterHost,
 		VCenterUsername:   cfg.VCenterUsername,
 		VCenterPassword:   cfg.VCenterPassword,
@@ -273,12 +274,13 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		return nil, err
 	}
 
-	// STEP 16: Wait for installation to complete
-	if err := b.waitInstall(ctx, createdVM, cfg, logger); err != nil {
-		return nil, fmt.Errorf("installation failed: %w", err)
+	// STEP 16: Wait for installation for profiles that use Ubuntu autoinstall flow.
+	if cfg.EffectiveProfile() == "ubuntu" {
+		if err := b.waitInstall(ctx, createdVM, cfg, logger); err != nil {
+			return nil, fmt.Errorf("installation failed: %w", err)
+		}
+		logger.Info("Installation complete")
 	}
-
-	logger.Info("Installation complete")
 
 	// STEP 16.5: Profile post-install actions
 	if err := provisioner.PostInstall(ctx, profile.Input{
@@ -298,6 +300,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		DataDiskMountPath: cfg.DataDiskMountPath,
 		SwapSizeGB:        cfg.SwapSizeGB,
 		OSVersion:         cfg.EffectiveOSVersion(),
+		OSSchematicID:     cfg.EffectiveOSSchematicID(),
 		VCenterHost:       cfg.VCenterHost,
 		VCenterUsername:   cfg.VCenterUsername,
 		VCenterPassword:   cfg.VCenterPassword,
@@ -313,9 +316,10 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		return nil, err
 	}
 
-	// STEP 17: Verify SSH access
-	if cfg.SkipSSHVerify {
-		logger.Warn("Skipping SSH verification (SkipSSHVerify=true)")
+	// STEP 17: Verify SSH access for Ubuntu profile.
+	skipSSHVerify := cfg.SkipSSHVerify || cfg.EffectiveProfile() != "ubuntu"
+	if skipSSHVerify {
+		logger.Warn("Skipping SSH verification", "profile", cfg.EffectiveProfile(), "skip_ssh_verify", cfg.SkipSSHVerify)
 	} else {
 		if err := b.checkSSH(ctx, cfg.IPAddress); err != nil {
 			return nil, fmt.Errorf("SSH verification failed: %w", err)
@@ -330,7 +334,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 		Name:            cfg.Name,
 		IPAddress:       cfg.IPAddress,
 		ManagedObject:   createdVM.Reference(),
-		SSHReady:        !cfg.SkipSSHVerify,
+		SSHReady:        !skipSSHVerify,
 		Hostname:        cfg.Name,
 		VCenterHost:     cfg.VCenterHost,
 		VCenterPort:     cfg.VCenterPort,
