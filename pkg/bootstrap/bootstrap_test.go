@@ -17,6 +17,8 @@ import (
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 	"github.com/Bibi40k/vmware-vm-bootstrap/internal/utils"
 	isomocks "github.com/Bibi40k/vmware-vm-bootstrap/pkg/iso/mocks"
+	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile"
+	ubuntuprofile "github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile/ubuntu"
 	vcmocks "github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter/mocks"
 	vmmocks "github.com/Bibi40k/vmware-vm-bootstrap/pkg/vm/mocks"
 
@@ -65,6 +67,9 @@ func testBootstrapper(
 		},
 		newISOManager: func(ctx context.Context) isoiface.ManagerInterface {
 			return isoMgr
+		},
+		resolveProfile: func(profileName string) (profile.Provisioner, error) {
+			return ubuntuprofile.New(), nil
 		},
 		waitInstall: func(ctx context.Context, vmObj *object.VirtualMachine, cfg *VMConfig, logger *slog.Logger) error {
 			return nil

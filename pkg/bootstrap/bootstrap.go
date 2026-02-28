@@ -4,17 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 	"github.com/Bibi40k/vmware-vm-bootstrap/internal/utils"
-	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/cloudinit"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/iso"
+	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile"
+	ubuntuprofile "github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile/ubuntu"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vm"
-	"github.com/google/uuid"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -32,6 +30,7 @@ type bootstrapper struct {
 	connectVCenter func(ctx context.Context, cfg *VMConfig) (vcenter.ClientInterface, error)
 	newVMCreator   func(ctx context.Context) vm.CreatorInterface
 	newISOManager  func(ctx context.Context) iso.ManagerInterface
+	resolveProfile func(profileName string) (profile.Provisioner, error)
 	waitInstall    func(ctx context.Context, vmObj *object.VirtualMachine, cfg *VMConfig, logger *slog.Logger) error
 	checkSSH       func(ctx context.Context, ipAddr string) error
 }
@@ -53,6 +52,12 @@ func defaultBootstrapper() *bootstrapper {
 		},
 		newISOManager: func(ctx context.Context) iso.ManagerInterface {
 			return iso.NewManager(ctx)
+		},
+		resolveProfile: func(profileName string) (profile.Provisioner, error) {
+			if profileName == "" || profileName == "ubuntu" {
+				return ubuntuprofile.New(), nil
+			}
+			return nil, fmt.Errorf("unsupported profile %q", profileName)
 		},
 		waitInstall: waitForInstallation,
 		checkSSH:    verifySSHAccess,
@@ -178,7 +183,7 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 
 	// Cleanup partial VM and uploaded ISOs on failure (idempotency)
 	var bootstrapSuccess bool
-	var nocloudUploadPath string // set after upload, used in cleanup
+	var profileResult profile.Result
 	defer func() {
 		if !bootstrapSuccess && !cfg.SkipCleanupOnError {
 			if createdVM != nil {
@@ -187,12 +192,12 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 					logger.Error("Failed to cleanup partial VM", "error", deleteErr)
 				}
 			}
-			if nocloudUploadPath != "" {
-				if deleteErr := isoMgr.DeleteFromDatastore(isoDatastoreName, nocloudUploadPath,
+			if profileResult.NoCloudUploadPath != "" {
+				if deleteErr := isoMgr.DeleteFromDatastore(isoDatastoreName, profileResult.NoCloudUploadPath,
 					cfg.VCenterHost, cfg.VCenterUsername, cfg.VCenterPassword, cfg.VCenterInsecure); deleteErr != nil {
 					logger.Warn("Failed to cleanup NoCloud ISO from datastore", "error", deleteErr)
 				} else {
-					logger.Info("NoCloud ISO cleaned up from datastore", "path", nocloudUploadPath)
+					logger.Info("NoCloud ISO cleaned up from datastore", "path", profileResult.NoCloudUploadPath)
 				}
 			}
 		}
@@ -226,156 +231,42 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 
 	logger.Info("VM hardware configuration complete")
 
-	// STEP 10: Generate cloud-init configs
-	generator, err := cloudinit.NewGenerator()
+	provisioner, err := b.resolveProfile(cfg.Profile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cloud-init generator: %w", err)
+		return nil, fmt.Errorf("failed to resolve profile: %w", err)
 	}
 
-	// Resolve password hash: PasswordHash takes priority, then auto-hash Password
-	var passwordHash string
-	switch {
-	case cfg.PasswordHash != "":
-		passwordHash = cfg.PasswordHash
-	case cfg.Password != "":
-		hashed, hashErr := utils.HashPasswordBcrypt(cfg.Password)
-		if hashErr != nil {
-			return nil, fmt.Errorf("failed to hash password: %w", hashErr)
-		}
-		passwordHash = hashed
-	default:
-		// No password - SSH key-only access
-		passwordHash = "*"
-	}
-
-	// Calculate CIDR before generating configs (needed in user-data and network-config)
-	cidr, err := utils.NetmaskToCIDR(cfg.Netmask)
-	if err != nil {
-		return nil, fmt.Errorf("invalid netmask: %w", err)
-	}
-
-	// Compute swap size: per-VM override takes priority, else use default from configs/defaults.yaml
-	swapSizeGB := configs.Defaults.CloudInit.SwapSizeGB
-	if cfg.SwapSizeGB != nil {
-		swapSizeGB = *cfg.SwapSizeGB
-	}
-	swapSize := fmt.Sprintf("%dG", swapSizeGB)
-
-	// Generate user-data
-	userData, err := generator.GenerateUserData(&cloudinit.UserDataInput{
-		Hostname:          cfg.Name,
+	profileResult, err = provisioner.ProvisionAndBoot(ctx, profile.Input{
+		VMName:            cfg.Name,
 		Username:          cfg.Username,
-		PasswordHash:      passwordHash,
+		Password:          cfg.Password,
+		PasswordHash:      cfg.PasswordHash,
 		SSHPublicKeys:     cfg.SSHPublicKeys,
 		AllowPasswordSSH:  cfg.AllowPasswordSSH,
-		Locale:            cfg.Locale,
 		Timezone:          cfg.Timezone,
-		KeyboardLayout:    configs.Defaults.CloudInit.KeyboardLayout,
-		SwapSize:          swapSize,
-		SwapSizeGB:        swapSizeGB,
-		Packages:          configs.Defaults.CloudInit.Packages,
-		UserGroups:        configs.Defaults.CloudInit.UserGroups,
-		UserShell:         configs.Defaults.CloudInit.UserShell,
-		InterfaceName:     cfg.NetworkInterface,
-		DataDiskMountPath: cfg.DataDiskMountPath,
+		Locale:            cfg.Locale,
+		NetworkInterface:  cfg.NetworkInterface,
 		IPAddress:         cfg.IPAddress,
-		CIDR:              cidr,
+		Netmask:           cfg.Netmask,
 		Gateway:           cfg.Gateway,
 		DNS:               cfg.DNS,
+		DataDiskMountPath: cfg.DataDiskMountPath,
+		SwapSizeGB:        cfg.SwapSizeGB,
+		OSVersion:         cfg.EffectiveUbuntuVersion(),
+		VCenterHost:       cfg.VCenterHost,
+		VCenterUsername:   cfg.VCenterUsername,
+		VCenterPassword:   cfg.VCenterPassword,
+		VCenterInsecure:   cfg.VCenterInsecure,
+	}, profile.Runtime{
+		CreatedVM:        createdVM,
+		Creator:          creator,
+		ISOManager:       isoMgr,
+		ISODatastore:     isoDatastore,
+		ISODatastoreName: isoDatastoreName,
+		Logger:           logger,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate user-data: %w", err)
-	}
-
-	// Generate meta-data
-	metaData, err := generator.GenerateMetaData(&cloudinit.MetaDataInput{
-		InstanceID: uuid.New().String(),
-		Hostname:   cfg.Name,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate meta-data: %w", err)
-	}
-
-	// Generate network-config
-	networkConfig, err := generator.GenerateNetworkConfig(&cloudinit.NetworkConfigInput{
-		InterfaceName: cfg.NetworkInterface,
-		IPAddress:     cfg.IPAddress,
-		CIDR:          cidr,
-		Gateway:       cfg.Gateway,
-		DNS:           cfg.DNS,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate network-config: %w", err)
-	}
-
-	logger.Info("Cloud-init configs generated")
-
-	// STEP 11: Download Ubuntu ISO
-	ubuntuISOPath, err := isoMgr.DownloadUbuntu(cfg.EffectiveUbuntuVersion())
-	if err != nil {
-		return nil, fmt.Errorf("failed to download Ubuntu ISO: %w", err)
-	}
-
-	logger.Info("Ubuntu ISO ready", "path", ubuntuISOPath)
-
-	// STEP 11.5: Modify Ubuntu ISO for autoinstall (kernel param + timeout)
-	// wasCreated=true means ISO was rebuilt → must force overwrite on datastore
-	ubuntuISOPath, _, err = isoMgr.ModifyUbuntuISO(ubuntuISOPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to modify Ubuntu ISO: %w", err)
-	}
-
-	logger.Info("Ubuntu ISO modified for autoinstall", "path", ubuntuISOPath)
-
-	// STEP 12: Create NoCloud ISO
-	nocloudISOPath, err := isoMgr.CreateNoCloudISO(userData, metaData, networkConfig, cfg.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create NoCloud ISO: %w", err)
-	}
-
-	logger.Info("NoCloud ISO created", "path", nocloudISOPath)
-
-	// STEP 13: Upload ISOs to datastore
-	ubuntuUploadPath := fmt.Sprintf("ISO/ubuntu/%s", filepath.Base(ubuntuISOPath))
-	nocloudUploadPath = fmt.Sprintf("ISO/nocloud/%s", filepath.Base(nocloudISOPath))
-
-	if err := isoMgr.UploadToDatastore(isoDatastore, ubuntuISOPath, ubuntuUploadPath,
-		cfg.VCenterHost, cfg.VCenterUsername, cfg.VCenterPassword, cfg.VCenterInsecure); err != nil {
-		return nil, fmt.Errorf("failed to upload Ubuntu ISO: %w", err)
-	}
-
-	// NoCloud ISO: always upload (VM-specific, small 1MB, matches Python behavior)
-	if err := isoMgr.UploadAlways(isoDatastore, nocloudISOPath, nocloudUploadPath,
-		cfg.VCenterHost, cfg.VCenterUsername, cfg.VCenterPassword, cfg.VCenterInsecure); err != nil {
-		return nil, fmt.Errorf("failed to upload NoCloud ISO: %w", err)
-	}
-
-	// Cleanup NoCloud ISO after upload (VM-specific, no longer needed locally)
-	_ = os.Remove(nocloudISOPath)
-	logger.Info("NoCloud ISO uploaded and cleaned up")
-
-	logger.Info("ISOs uploaded to datastore")
-
-	// STEP 14: Mount ISOs to VM
-	ubuntuMountPath := fmt.Sprintf("[%s] %s", isoDatastoreName, ubuntuUploadPath)
-	nocloudMountPath := fmt.Sprintf("[%s] %s", isoDatastoreName, nocloudUploadPath)
-
-	if err := isoMgr.MountISOs(createdVM, ubuntuMountPath, nocloudMountPath); err != nil {
-		return nil, fmt.Errorf("failed to mount ISOs: %w", err)
-	}
-
-	logger.Info("ISOs mounted to VM")
-
-	// STEP 15: Power on VM
-	if err := creator.PowerOn(createdVM); err != nil {
-		return nil, fmt.Errorf("failed to power on VM: %w", err)
-	}
-
-	logger.Info("VM powered on - waiting for installation...")
-
-	// STEP 15.5: Verify CD-ROMs are connected after boot (matches Python Step 9)
-	if err := isoMgr.EnsureCDROMsConnectedAfterBoot(createdVM); err != nil {
-		logger.Warn("CD-ROM post-boot check failed (continuing)", "error", err)
+		return nil, err
 	}
 
 	// STEP 16: Wait for installation to complete
@@ -385,26 +276,37 @@ func (b *bootstrapper) run(ctx context.Context, cfg *VMConfig, logger *slog.Logg
 
 	logger.Info("Installation complete")
 
-	// STEP 16.5: Cleanup ISOs from datastore
-	logger.Info("Powering off VM to release CD-ROM file locks...")
-	if err := creator.PowerOff(createdVM); err != nil {
-		logger.Warn("Failed to power off VM for cleanup (continuing)", "error", err)
-	} else {
-		if err := isoMgr.RemoveAllCDROMs(createdVM); err != nil {
-			logger.Warn("Failed to remove CD-ROMs (continuing)", "error", err)
-		}
-
-		if err := isoMgr.DeleteFromDatastore(isoDatastoreName, nocloudUploadPath,
-			cfg.VCenterHost, cfg.VCenterUsername, cfg.VCenterPassword, cfg.VCenterInsecure); err != nil {
-			logger.Warn("Failed to delete NoCloud ISO from datastore (non-critical)", "error", err)
-		} else {
-			logger.Info("NoCloud ISO deleted from datastore", "path", nocloudUploadPath)
-		}
-
-		logger.Info("Powering VM back on...")
-		if err := creator.PowerOn(createdVM); err != nil {
-			return nil, fmt.Errorf("failed to power VM back on after cleanup: %w", err)
-		}
+	// STEP 16.5: Profile post-install actions
+	if err := provisioner.PostInstall(ctx, profile.Input{
+		VMName:            cfg.Name,
+		Username:          cfg.Username,
+		Password:          cfg.Password,
+		PasswordHash:      cfg.PasswordHash,
+		SSHPublicKeys:     cfg.SSHPublicKeys,
+		AllowPasswordSSH:  cfg.AllowPasswordSSH,
+		Timezone:          cfg.Timezone,
+		Locale:            cfg.Locale,
+		NetworkInterface:  cfg.NetworkInterface,
+		IPAddress:         cfg.IPAddress,
+		Netmask:           cfg.Netmask,
+		Gateway:           cfg.Gateway,
+		DNS:               cfg.DNS,
+		DataDiskMountPath: cfg.DataDiskMountPath,
+		SwapSizeGB:        cfg.SwapSizeGB,
+		OSVersion:         cfg.EffectiveUbuntuVersion(),
+		VCenterHost:       cfg.VCenterHost,
+		VCenterUsername:   cfg.VCenterUsername,
+		VCenterPassword:   cfg.VCenterPassword,
+		VCenterInsecure:   cfg.VCenterInsecure,
+	}, profile.Runtime{
+		CreatedVM:        createdVM,
+		Creator:          creator,
+		ISOManager:       isoMgr,
+		ISODatastore:     isoDatastore,
+		ISODatastoreName: isoDatastoreName,
+		Logger:           logger,
+	}, profileResult); err != nil {
+		return nil, err
 	}
 
 	// STEP 17: Verify SSH access
