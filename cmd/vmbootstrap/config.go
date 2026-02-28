@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -376,7 +378,7 @@ func editVMConfig(path string) error {
 	v.Profile = selectOSProfile(currentProfile)
 	switch v.Profile {
 	case "talos":
-		v.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(v.Profiles.Talos.Version, "v1.12.0"))
+		v.Profiles.Talos.Version = selectTalosVersion(v.Profiles.Talos.Version)
 		v.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", v.Profiles.Talos.SchematicID)
 	default:
 		selectUbuntuVersion(&v.Profiles.Ubuntu.Version)
@@ -638,7 +640,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
 	switch out.VM.Profile {
 	case "talos":
-		out.VM.Profiles.Talos.Version = readLine("Talos version (e.g. v1.12.0)", strOrDefault(out.VM.Profiles.Talos.Version, "v1.12.0"))
+		out.VM.Profiles.Talos.Version = selectTalosVersion(out.VM.Profiles.Talos.Version)
 		out.VM.Profiles.Talos.SchematicID = readLine("Talos schematic ID (optional)", out.VM.Profiles.Talos.SchematicID)
 	default:
 		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
@@ -1278,6 +1280,88 @@ func selectUbuntuVersion(target *string) {
 		Default: defaultUbuntu,
 	}, &ubuntuChoice)
 	*target = strings.Split(ubuntuChoice, " ")[0]
+}
+
+type githubRelease struct {
+	TagName    string `json:"tag_name"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
+}
+
+func fetchTalosVersions(limit int) ([]string, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"https://api.github.com/repos/siderolabs/talos/releases?per_page=20", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github api status %d", resp.StatusCode)
+	}
+
+	var releases []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	var versions []string
+	for _, r := range releases {
+		if r.Draft || r.Prerelease {
+			continue
+		}
+		v := strings.TrimSpace(r.TagName)
+		if !strings.HasPrefix(v, "v") {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		versions = append(versions, v)
+		if len(versions) >= limit {
+			break
+		}
+	}
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("no stable talos releases found")
+	}
+	return versions, nil
+}
+
+func selectTalosVersion(current string) string {
+	defaultVersion := strOrDefault(strings.TrimSpace(current), "v1.12.0")
+	versions, err := fetchTalosVersions(5)
+	if err != nil || len(versions) == 0 {
+		return readLine("Talos version (e.g. v1.12.0)", defaultVersion)
+	}
+
+	options := append([]string{}, versions...)
+	options = append(options, "Custom version...")
+	defaultOption := options[0]
+	for _, v := range versions {
+		if v == defaultVersion {
+			defaultOption = v
+			break
+		}
+	}
+	var choice string
+	surveySelect(&survey.Select{
+		Message: "Talos version:",
+		Options: options,
+		Default: defaultOption,
+	}, &choice)
+	if choice == "Custom version..." {
+		return readLine("Talos version (e.g. v1.12.0)", defaultVersion)
+	}
+	return choice
 }
 
 func autoGateway(ip string) string {

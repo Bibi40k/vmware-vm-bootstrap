@@ -173,6 +173,7 @@ func main() {
 	signal.Notify(mainSigCh, os.Interrupt)
 	go func() {
 		<-mainSigCh
+		restoreTTYOnExit()
 		fmt.Println("\nCancelled.")
 		os.Exit(0)
 	}()
