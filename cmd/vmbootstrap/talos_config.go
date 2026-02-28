@@ -208,6 +208,8 @@ func selectTalosSchematicID(current string) string {
 }
 
 func selectTalosExtensions(catalog, recommended, defaults []string) []string {
+	const showFullListOption = "Display full extensions list"
+
 	fmt.Println("[2/2] System Extensions")
 	fmt.Println("  Use Space to toggle, Enter to confirm.")
 
@@ -246,14 +248,19 @@ func selectTalosExtensions(catalog, recommended, defaults []string) []string {
 		defaultSelected = append(defaultSelected, recommendedList[0])
 	}
 
+	recommendedOptions := append([]string{}, recommendedList...)
+	if len(ordered) > len(recommendedList) {
+		recommendedOptions = append(recommendedOptions, showFullListOption)
+	}
+
 	var selected []string
 	if err := survey.AskOne(&survey.MultiSelect{
 		Message: "Select recommended extensions:",
-		Options: recommendedList,
+		Options: recommendedOptions,
 		Default: defaultSelected,
 		PageSize: func() int {
-			if len(recommendedList) < 10 {
-				return len(recommendedList)
+			if len(recommendedOptions) < 10 {
+				return len(recommendedOptions)
 			}
 			return 10
 		}(),
@@ -264,7 +271,10 @@ func selectTalosExtensions(catalog, recommended, defaults []string) []string {
 	}
 	drainStdin()
 
-	if len(ordered) > len(recommendedList) && readYesNo("Show full extension list?", false) {
+	showFullList := slices.Contains(selected, showFullListOption)
+	selected = slices.DeleteFunc(selected, func(v string) bool { return v == showFullListOption })
+
+	if showFullList {
 		fullDefault := uniqueSorted(selected)
 		var fullSelected []string
 		if err := survey.AskOne(&survey.MultiSelect{
