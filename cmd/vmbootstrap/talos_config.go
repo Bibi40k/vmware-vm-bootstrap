@@ -289,8 +289,9 @@ func selectTalosExtensions(catalog, recommended, defaults []string) []string {
 			}(),
 		}, &fullSelected); err != nil {
 			drainStdin()
-			fmt.Println("  Cancelled.")
-			return nil
+			// ESC/Ctrl+C here should just close full list and keep recommended selection.
+			fmt.Println("  Full list closed.")
+			fullSelected = fullDefault
 		}
 		drainStdin()
 		selected = fullSelected
