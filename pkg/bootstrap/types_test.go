@@ -193,3 +193,47 @@ func TestValidate_DiskTooSmall(t *testing.T) {
 		t.Fatal("expected error for DiskSizeGB < 10")
 	}
 }
+
+func TestValidate_TalosProfileRequiresVersion(t *testing.T) {
+	cfg := minimalValidConfigForTests()
+	cfg.Profile = "talos"
+	cfg.UbuntuVersion = ""
+	cfg.Profiles.Ubuntu.Version = ""
+	cfg.Profiles.Talos.Version = ""
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error when talos profile has no version")
+	}
+}
+
+func TestValidate_TalosProfileWithVersion(t *testing.T) {
+	cfg := minimalValidConfigForTests()
+	cfg.Profile = "talos"
+	cfg.UbuntuVersion = ""
+	cfg.Profiles.Ubuntu.Version = ""
+	cfg.Profiles.Talos.Version = "v1.12.0"
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error for valid talos profile: %v", err)
+	}
+}
+
+func minimalValidConfigForTests() *VMConfig {
+	return &VMConfig{
+		VCenterHost:     "vcenter.example.com",
+		VCenterUsername: "admin",
+		VCenterPassword: "secret",
+		Name:            "vm1",
+		Username:        "sysadmin",
+		SSHPublicKeys:   []string{"ssh-ed25519 AAAA"},
+		IPAddress:       "192.168.1.10",
+		Netmask:         "255.255.255.0",
+		Gateway:         "192.168.1.1",
+		DNS:             []string{"8.8.8.8"},
+		DiskSizeGB:      20,
+		UbuntuVersion:   "24.04",
+		Datacenter:      "DC1",
+		Datastore:       "DS1",
+		NetworkName:     "LAN",
+	}
+}

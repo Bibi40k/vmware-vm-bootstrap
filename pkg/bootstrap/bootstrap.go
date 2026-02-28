@@ -10,6 +10,7 @@ import (
 	"github.com/Bibi40k/vmware-vm-bootstrap/internal/utils"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/iso"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile"
+	talosprofile "github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile/talos"
 	ubuntuprofile "github.com/Bibi40k/vmware-vm-bootstrap/pkg/profile/ubuntu"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vm"
@@ -56,6 +57,9 @@ func defaultBootstrapper() *bootstrapper {
 		resolveProfile: func(profileName string) (profile.Provisioner, error) {
 			if profileName == "" || profileName == "ubuntu" {
 				return ubuntuprofile.New(), nil
+			}
+			if profileName == "talos" {
+				return talosprofile.New(), nil
 			}
 			return nil, fmt.Errorf("unsupported profile %q", profileName)
 		},

@@ -68,11 +68,18 @@ type VMConfig struct {
 // VMProfiles contains profile-specific settings.
 type VMProfiles struct {
 	Ubuntu UbuntuProfile
+	Talos  TalosProfile
 }
 
 // UbuntuProfile contains Ubuntu-specific settings for profile mode.
 type UbuntuProfile struct {
 	Version string
+}
+
+// TalosProfile contains Talos-specific settings for profile mode.
+type TalosProfile struct {
+	Version     string
+	SchematicID string
 }
 
 // VM represents a bootstrapped virtual machine.
@@ -136,11 +143,14 @@ func (cfg *VMConfig) Validate() error {
 	if profile == "" {
 		profile = "ubuntu"
 	}
-	if profile != "ubuntu" {
-		return fmt.Errorf("unsupported Profile %q (supported: ubuntu)", profile)
+	if profile != "ubuntu" && profile != "talos" {
+		return fmt.Errorf("unsupported Profile %q (supported: ubuntu, talos)", profile)
 	}
-	if cfg.effectiveUbuntuVersion() == "" {
+	if profile == "ubuntu" && cfg.effectiveUbuntuVersion() == "" {
 		return fmt.Errorf("UbuntuVersion is required (or Profiles.Ubuntu.Version)")
+	}
+	if profile == "talos" && cfg.effectiveTalosVersion() == "" {
+		return fmt.Errorf("Profiles.Talos.Version is required for talos profile")
 	}
 	if cfg.Datacenter == "" {
 		return fmt.Errorf("datacenter is required")
@@ -199,4 +209,13 @@ func (cfg *VMConfig) effectiveUbuntuVersion() string {
 		return cfg.Profiles.Ubuntu.Version
 	}
 	return cfg.UbuntuVersion
+}
+
+// EffectiveTalosVersion returns Talos version from profile config.
+func (cfg *VMConfig) EffectiveTalosVersion() string {
+	return cfg.effectiveTalosVersion()
+}
+
+func (cfg *VMConfig) effectiveTalosVersion() string {
+	return cfg.Profiles.Talos.Version
 }
