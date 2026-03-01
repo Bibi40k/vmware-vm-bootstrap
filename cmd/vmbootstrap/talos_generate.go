@@ -61,8 +61,36 @@ func runTalosGeneratePrompt() error {
 		fmt.Println("  Cancelled.")
 		return nil
 	}
+	if planPath == "" {
+		planPath = talosClusterPlanDefaultPath
+	}
+	if _, err := os.Stat(planPath); os.IsNotExist(err) {
+		fmt.Printf("  \033[33mPlan config not found:\033[0m %s\n", planPath)
+		if !readYesNo("Create it from example template now?", true) {
+			fmt.Println("  Cancelled.")
+			return nil
+		}
+		if err := createTalosPlanFromExample(planPath); err != nil {
+			return err
+		}
+		fmt.Printf("  \033[32m✓ Created:\033[0m %s\n", planPath)
+		fmt.Println("  Edit values, then run generator again.")
+		return nil
+	}
 	force := readYesNoDanger("Overwrite existing generated VM configs?")
 	return runTalosGenerate(planPath, force)
+}
+
+func createTalosPlanFromExample(planPath string) error {
+	examplePath := filepath.Join("configs", "talos.cluster.example.yaml")
+	plaintext, err := os.ReadFile(examplePath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", examplePath, err)
+	}
+	if err := sopsEncrypt(planPath, plaintext); err != nil {
+		return err
+	}
+	return nil
 }
 
 func runTalosGenerate(planPath string, force bool) error {
