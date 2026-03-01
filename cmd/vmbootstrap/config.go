@@ -197,6 +197,63 @@ type vmNetworkStepDefaults struct {
 	ShowWarnings bool
 }
 
+type vmAccessStepOptions struct {
+	SSHKeyPathDefaultWhenEmpty string
+	UseChangePasswordFlow      bool
+	SetPasswordDefault         bool
+	AllowPasswordDefault       bool
+}
+
+func runVMAccessStep(vm *VMWizardOutput, opts vmAccessStepOptions) {
+	if vm == nil {
+		return
+	}
+	fmt.Println("[5/5] Access / Node Options")
+	if vm.VM.Profile == "talos" {
+		fmt.Println("  Talos profile selected: SSH/bootstrap user settings are not required.")
+		vm.VM.Username = ""
+		vm.VM.SSHKeyPath = ""
+		vm.VM.SSHKey = ""
+		vm.VM.Password = ""
+		vm.VM.AllowPasswordSSH = false
+		fmt.Println()
+		return
+	}
+
+	vm.VM.Username = readLine("Username", strOrDefault(vm.VM.Username, "sysadmin"))
+	defaultKeyPath := vm.VM.SSHKeyPath
+	if strings.TrimSpace(defaultKeyPath) == "" && strings.TrimSpace(opts.SSHKeyPathDefaultWhenEmpty) != "" {
+		defaultKeyPath = opts.SSHKeyPathDefaultWhenEmpty
+	}
+	vm.VM.SSHKeyPath = readFilePath("SSH public key file", defaultKeyPath)
+	vm.VM.SSHPort = readInt("SSH port", intOrDefault(vm.VM.SSHPort, 22), 1, 65535)
+
+	if opts.UseChangePasswordFlow {
+		pwStatus := "not set"
+		if vm.VM.Password != "" {
+			pwStatus = "set"
+		}
+		if readYesNo(fmt.Sprintf("Change password? (currently %s)", pwStatus), false) {
+			vm.VM.Password = readPassword("New password (blank = remove)")
+		}
+		if vm.VM.Password != "" {
+			vm.VM.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", vm.VM.AllowPasswordSSH)
+		} else {
+			vm.VM.AllowPasswordSSH = false
+		}
+		fmt.Println()
+		return
+	}
+
+	if readYesNo("Set password?", opts.SetPasswordDefault) {
+		vm.VM.Password = readPassword("Password")
+	}
+	if vm.VM.Password != "" {
+		vm.VM.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", opts.AllowPasswordDefault)
+	}
+	fmt.Println()
+}
+
 func runVMNetworkStep(vm *VMWizardOutput, resources *VCenterResources, defaults vmNetworkStepDefaults) {
 	if vm == nil {
 		return
@@ -401,8 +458,6 @@ func editVMConfig(path string) error {
 	}
 	fmt.Println()
 
-	v := &cfg.VM
-
 	// === [1] OS Profile ===
 	if runVMOSProfileStep(&cfg) {
 		return nil
@@ -421,32 +476,9 @@ func editVMConfig(path string) error {
 	runVMNetworkStep(&cfg, resources, vmNetworkStepDefaults{})
 
 	// === [5] Access / Node Options ===
-	fmt.Println("[5/5] Access / Node Options")
-	if v.Profile == "talos" {
-		fmt.Println("  Talos profile selected: SSH/bootstrap user settings are not required.")
-		v.Username = ""
-		v.SSHKeyPath = ""
-		v.SSHKey = ""
-		v.Password = ""
-		v.AllowPasswordSSH = false
-	} else {
-		v.Username = readLine("Username", strOrDefault(v.Username, "sysadmin"))
-		v.SSHKeyPath = readFilePath("SSH public key file", v.SSHKeyPath)
-		v.SSHPort = readInt("SSH port", intOrDefault(v.SSHPort, 22), 1, 65535)
-		pwStatus := "not set"
-		if v.Password != "" {
-			pwStatus = "set"
-		}
-		if readYesNo(fmt.Sprintf("Change password? (currently %s)", pwStatus), false) {
-			v.Password = readPassword("New password (blank = remove)")
-		}
-		if v.Password != "" {
-			v.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", v.AllowPasswordSSH)
-		} else {
-			v.AllowPasswordSSH = false
-		}
-	}
-	fmt.Println()
+	runVMAccessStep(&cfg, vmAccessStepOptions{
+		UseChangePasswordFlow: true,
+	})
 
 	fmt.Println("Summary")
 	printSummary(cfg)
@@ -667,27 +699,11 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	})
 
 	// === [5] Access / Node Options ===
-	fmt.Println("[5/5] Access / Node Options")
-	if out.VM.Profile == "talos" {
-		fmt.Println("  Talos profile selected: SSH/bootstrap user settings are not required.")
-		out.VM.Username = ""
-		out.VM.SSHKeyPath = ""
-		out.VM.SSHKey = ""
-		out.VM.Password = ""
-		out.VM.AllowPasswordSSH = false
-	} else {
-		out.VM.Username = readLine("Username", strOrDefault(out.VM.Username, "sysadmin"))
-		out.VM.SSHKeyPath = readFilePath("SSH public key file", strOrDefault(out.VM.SSHKeyPath, os.ExpandEnv("$HOME/.ssh/id_ed25519.pub")))
-		out.VM.SSHPort = readInt("SSH port", intOrDefault(out.VM.SSHPort, 22), 1, 65535)
-
-		if readYesNo("Set password?", true) {
-			out.VM.Password = readPassword("Password")
-		}
-		if out.VM.Password != "" {
-			out.VM.AllowPasswordSSH = readYesNo("Allow SSH password authentication?", false)
-		}
-	}
-	fmt.Println()
+	runVMAccessStep(&out, vmAccessStepOptions{
+		SSHKeyPathDefaultWhenEmpty: os.ExpandEnv("$HOME/.ssh/id_ed25519.pub"),
+		SetPasswordDefault:         true,
+		AllowPasswordDefault:       false,
+	})
 
 	out.VM.TimeoutMinutes = 45
 
