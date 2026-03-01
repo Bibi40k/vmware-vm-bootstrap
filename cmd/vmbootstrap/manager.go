@@ -159,6 +159,10 @@ func listDrafts(all bool) []draftInfo {
 			kind = "vm"
 		} else if targetBase == "vcenter.sops.yaml" {
 			kind = "vcenter"
+		} else if targetBase == "talos.schematics.sops.yaml" {
+			kind = "talos_schematics"
+		} else if targetBase == "talos.cluster.sops.yaml" {
+			kind = "talos_cluster"
 		}
 		fi, _ := os.Stat(p)
 		mt := time.Time{}
@@ -212,6 +216,10 @@ func resumeDraft(d draftInfo) error {
 		return createVCenterConfigWithDraft(d.targetPath, d.path)
 	case "vm":
 		return runCreateWizardWithDraft(d.targetPath, d.path)
+	case "talos_schematics":
+		return runTalosConfigWizardWithDraft(d.path)
+	case "talos_cluster":
+		return createTalosPlanInteractive(d.targetPath, d.path)
 	default:
 		return fmt.Errorf("unknown draft type: %s", d.label)
 	}

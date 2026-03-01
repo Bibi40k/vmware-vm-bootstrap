@@ -195,16 +195,7 @@ func createVCenterConfig(path string) error {
 }
 
 func createVCenterConfigWithDraft(path, draftPath string) error {
-	data, err := os.ReadFile(draftPath)
-	if err != nil {
-		return err
-	}
-	var cfg vcenterFileConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("parse draft: %w", err)
-	}
-	fmt.Printf("\n\033[33m⚠ Resuming draft: %s\033[0m\n", filepath.Base(draftPath))
-	return createVCenterConfigWithSeed(path, cfg, draftPath)
+	return createVCenterConfigWithSeed(path, vcenterFileConfig{}, draftPath)
 }
 
 func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath string) error {
@@ -213,17 +204,15 @@ func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath 
 	fmt.Println()
 
 	cfg := seed
+	if loaded, err := loadDraftYAML(draftPath, &cfg); err == nil && loaded {
+		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
+	}
 	v := &cfg.VCenter
 
-	stopDraftHandler := startDraftInterruptHandler(path, draftPath, func() ([]byte, bool) {
-		data, err := yaml.Marshal(cfg)
-		if err != nil {
-			return nil, false
-		}
-		if strings.TrimSpace(string(data)) == "vcenter: {}\n" {
-			return nil, false
-		}
-		return data, true
+	stopDraftHandler := startYAMLDraftHandler(path, draftPath, &cfg, func() bool {
+		return strings.TrimSpace(v.Host) == "" &&
+			strings.TrimSpace(v.Username) == "" &&
+			strings.TrimSpace(v.Datacenter) == ""
 	})
 	defer stopDraftHandler()
 

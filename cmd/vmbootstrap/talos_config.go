@@ -71,17 +71,40 @@ func saveTalosSchematics(path string, cfg *talosSchematicsFile) error {
 }
 
 func runTalosConfigWizard() error {
+	return runTalosConfigWizardWithDraft("")
+}
+
+func runTalosConfigWizardWithDraft(draftPath string) error {
 	fmt.Printf("\n\033[1mTalos\033[0m — Schematic Manager\n")
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
 
-	cfg, err := loadTalosSchematics(talosSchematicsConfigFile)
-	if err != nil {
-		return err
+	if draftPath == "" {
+		draftPath = latestDraftForTarget(talosSchematicsConfigFile)
 	}
+
+	cfg := &talosSchematicsFile{}
+	if loaded, err := loadDraftYAML(draftPath, cfg); err == nil && loaded {
+		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
+	} else {
+		loadedCfg, err := loadTalosSchematics(talosSchematicsConfigFile)
+		if err != nil {
+			return err
+		}
+		cfg = loadedCfg
+	}
+
 	if strings.TrimSpace(cfg.Talos.FactoryURL) == "" {
 		cfg.Talos.FactoryURL = configs.TalosExtensions.FactoryURL
 	}
+
+	stopDraftHandler := startYAMLDraftHandler(talosSchematicsConfigFile, draftPath, cfg, func() bool {
+		return strings.TrimSpace(cfg.Talos.FactoryURL) == "" &&
+			strings.TrimSpace(cfg.Talos.Default) == "" &&
+			len(cfg.Talos.Schematics) == 0
+	})
+	defer stopDraftHandler()
+
 	defaultName := strings.TrimSpace(cfg.Talos.Default)
 	if defaultName == "" {
 		defaultName = "VMware"
@@ -160,6 +183,7 @@ func runTalosConfigWizard() error {
 	if err := saveTalosSchematics(talosSchematicsConfigFile, cfg); err != nil {
 		return err
 	}
+	_ = cleanupDrafts(talosSchematicsConfigFile)
 	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", filepath.Base(talosSchematicsConfigFile))
 	return nil
 }
