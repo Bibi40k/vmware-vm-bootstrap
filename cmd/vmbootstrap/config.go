@@ -90,6 +90,34 @@ type datastoreCandidate struct {
 	Rationale    string
 }
 
+func runVMOSProfileStep(vm *VMWizardOutput) bool {
+	if vm == nil {
+		return false
+	}
+	fmt.Println("[1/5] OS Profile")
+	currentProfile := strOrDefault(vm.VM.Profile, "ubuntu")
+	vm.VM.Profile = selectOSProfile(currentProfile)
+	switch vm.VM.Profile {
+	case "talos":
+		vm.VM.Profiles.Talos.Version = selectTalosVersion(vm.VM.Profiles.Talos.Version)
+		for {
+			vm.VM.Profiles.Talos.SchematicID = strings.TrimSpace(selectTalosSchematicID(vm.VM.Profiles.Talos.SchematicID))
+			if wasPromptInterrupted() {
+				fmt.Println("  Cancelled.")
+				return true
+			}
+			if vm.VM.Profiles.Talos.SchematicID != "" {
+				break
+			}
+			fmt.Println("  Talos schematic ID is required")
+		}
+	default:
+		selectUbuntuVersion(&vm.VM.Profiles.Ubuntu.Version)
+	}
+	fmt.Println()
+	return false
+}
+
 // ─── Edit existing configs ───────────────────────────────────────────────────
 
 func editVCenterConfig(path string) error {
@@ -259,27 +287,9 @@ func editVMConfig(path string) error {
 	v := &cfg.VM
 
 	// === [1] OS Profile ===
-	fmt.Println("[1/5] OS Profile")
-	currentProfile := strOrDefault(v.Profile, "ubuntu")
-	v.Profile = selectOSProfile(currentProfile)
-	switch v.Profile {
-	case "talos":
-		v.Profiles.Talos.Version = selectTalosVersion(v.Profiles.Talos.Version)
-		for {
-			v.Profiles.Talos.SchematicID = strings.TrimSpace(selectTalosSchematicID(v.Profiles.Talos.SchematicID))
-			if wasPromptInterrupted() {
-				fmt.Println("  Cancelled.")
-				return nil
-			}
-			if v.Profiles.Talos.SchematicID != "" {
-				break
-			}
-			fmt.Println("  Talos schematic ID is required")
-		}
-	default:
-		selectUbuntuVersion(&v.Profiles.Ubuntu.Version)
+	if runVMOSProfileStep(&cfg) {
+		return nil
 	}
-	fmt.Println()
 
 	// === [2] VM Specs ===
 	fmt.Println("[2/5] VM Specs")
@@ -516,26 +526,9 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	}
 
 	// OS selector must be the first wizard question for new VM configs.
-	fmt.Println("[1/5] OS Profile")
-	out.VM.Profile = selectOSProfile(strOrDefault(out.VM.Profile, "ubuntu"))
-	switch out.VM.Profile {
-	case "talos":
-		out.VM.Profiles.Talos.Version = selectTalosVersion(out.VM.Profiles.Talos.Version)
-		for {
-			out.VM.Profiles.Talos.SchematicID = strings.TrimSpace(selectTalosSchematicID(out.VM.Profiles.Talos.SchematicID))
-			if wasPromptInterrupted() {
-				fmt.Println("  Cancelled.")
-				return nil
-			}
-			if out.VM.Profiles.Talos.SchematicID != "" {
-				break
-			}
-			fmt.Println("  Talos schematic ID is required")
-		}
-	default:
-		selectUbuntuVersion(&out.VM.Profiles.Ubuntu.Version)
+	if runVMOSProfileStep(&out) {
+		return nil
 	}
-	fmt.Println()
 
 	if outputFile == "" {
 		// Config file slug
