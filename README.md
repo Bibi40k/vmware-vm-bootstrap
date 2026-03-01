@@ -196,21 +196,14 @@ vmbootstrap node update --config configs/vm.node01.sops.yaml --to-version v1.12.
 
 Note: The library API consumes an in-memory `bootstrap.VMConfig` and has no SOPS dependency. SOPS is used only by the CLI for encrypted config files.
 
-Config files:
+## Config Files
 
-```bash
-# Example configs
-cp configs/vcenter.example.yaml configs/vcenter.sops.yaml
-cp configs/vm.example.yaml configs/vm.myvm.sops.yaml
-
-# SOPS config (edit the AGE key before use)
-cp .sops.yaml.example .sops.yaml
-cp .sopsrc.example .sopsrc
-
-# Encrypt configs
-sops -e -i configs/vcenter.sops.yaml
-sops -e -i configs/vm.myvm.sops.yaml
-```
+- `configs/vcenter.sops.yaml`: vCenter connection + default placement settings.
+- `configs/vm.*.sops.yaml`: per-VM runtime config (profile, compute, network, auth).
+- `configs/vm.example.yaml`: template for new VM config files.
+- `configs/talos.schematics.sops.yaml`: Talos Image Factory schematic catalog used by Talos profile flow.
+- `configs/defaults.yaml`: repo defaults for wizard prompts and runtime behavior.
+- `.sops.yaml` and `.sopsrc`: local SOPS/AGE setup for encryption.
 
 ## Requirements
 
