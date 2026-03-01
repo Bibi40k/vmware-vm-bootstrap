@@ -9,12 +9,17 @@ import (
 	"time"
 
 	survey "github.com/AlecAivazis/survey/v2"
+	wizard "github.com/Bibi40k/cli-wizard-core"
 	"gopkg.in/yaml.v3"
 )
 
 type menuItem struct {
 	label  string
 	action func() error
+}
+
+func menuLabel(tag, text string) string {
+	return wizard.FormatMenuLabel(tag, text, 13)
 }
 
 func runManager() error {
@@ -71,39 +76,30 @@ func buildMenuItems() []menuItem {
 	_, vcenterErr := os.Stat("configs/vcenter.sops.yaml")
 	vcenterExists := vcenterErr == nil
 
-	if vcenterExists {
-		items = append(items, menuItem{
-			label:  "[vcenter]  Edit vcenter.sops.yaml",
-			action: func() error { return editVCenterConfig("configs/vcenter.sops.yaml") },
-		})
-	} else {
-		items = append(items, menuItem{
-			label:  "[+vcenter] Create vcenter.sops.yaml",
-			action: func() error { return createVCenterConfig("configs/vcenter.sops.yaml") },
-		})
-	}
+	items = append(items, menuItem{
+		label: menuLabel("vcenter", "Manage vcenter.sops.yaml"),
+		action: func() error {
+			if _, err := os.Stat("configs/vcenter.sops.yaml"); err == nil {
+				return editVCenterConfig("configs/vcenter.sops.yaml")
+			}
+			return createVCenterConfig("configs/vcenter.sops.yaml")
+		},
+	})
 
 	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
 	for _, path := range vmFiles {
 		p := path
 		base := filepath.Base(p)
 		items = append(items, menuItem{
-			label:  "[vm]       Edit " + base,
+			label:  menuLabel("vm", "Edit "+base),
 			action: func() error { return editVMConfig(p) },
 		})
 	}
 
-	if _, err := os.Stat(talosSchematicsConfigFile); err == nil {
-		items = append(items, menuItem{
-			label:  "[talos]    Edit talos.schematics.sops.yaml",
-			action: runTalosConfigWizard,
-		})
-	} else {
-		items = append(items, menuItem{
-			label:  "[+talos]   Create talos.schematics.sops.yaml",
-			action: runTalosConfigWizard,
-		})
-	}
+	items = append(items, menuItem{
+		label:  menuLabel("schematic", "Manage talos.schematics.sops.yaml"),
+		action: runTalosConfigWizard,
+	})
 	drafts := listDrafts(true)
 	for _, d := range drafts {
 		draft := d
@@ -118,9 +114,9 @@ func buildMenuItems() []menuItem {
 	}
 
 	if vcenterExists {
-		items = append(items, menuItem{label: "[+vm]      Create new VM", action: runCreateWizard})
+		items = append(items, menuItem{label: menuLabel("vm", "Create new VM"), action: runCreateWizard})
 	}
-	items = append(items, menuItem{label: "           Exit", action: nil})
+	items = append(items, menuItem{label: "Exit", action: nil})
 
 	return items
 }
