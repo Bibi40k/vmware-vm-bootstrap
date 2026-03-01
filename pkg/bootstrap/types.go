@@ -40,6 +40,10 @@ type VMConfig struct {
 	ResourcePool string // Resource pool path (e.g., "WebTier")
 	Datastore    string // VM datastore name (e.g., "VMwareSSD01")
 	ISODatastore string // Datastore for ISO uploads (e.g., "VMwareStorage01"); falls back to Datastore if empty
+	// vCenter Content Library used for Talos OVA cache/deploy.
+	// Name is used when ID is empty; ID is preferred when both are set.
+	ContentLibrary   string
+	ContentLibraryID string
 
 	// === OS & User Configuration ===
 	// OS profile used for VM provisioning (default: "ubuntu").

@@ -128,11 +128,13 @@ func bootstrapVM(vmConfigPath string, resultPath string) error {
 		Gateway:          v.Gateway,
 		DNS:              buildDNS(v.DNS, v.DNS2),
 
-		Datacenter:   vcCfg.VCenter.Datacenter,
-		Folder:       v.Folder,
-		ResourcePool: v.ResourcePool,
-		Datastore:    v.Datastore,
-		ISODatastore: vcCfg.VCenter.ISODatastore,
+		Datacenter:       vcCfg.VCenter.Datacenter,
+		Folder:           v.Folder,
+		ResourcePool:     v.ResourcePool,
+		Datastore:        v.Datastore,
+		ISODatastore:     vcCfg.VCenter.ISODatastore,
+		ContentLibrary:   vcCfg.VCenter.ContentLibrary,
+		ContentLibraryID: vcCfg.VCenter.ContentLibraryID,
 	}
 	if profile == "ubuntu" {
 		cfg.Username = v.Username

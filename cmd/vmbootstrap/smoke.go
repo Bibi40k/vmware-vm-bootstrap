@@ -87,11 +87,13 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 		Gateway:     v.Gateway,
 		DNS:         buildDNS(v.DNS, v.DNS2),
 
-		Datacenter:   vcCfg.VCenter.Datacenter,
-		Folder:       v.Folder,
-		ResourcePool: v.ResourcePool,
-		Datastore:    v.Datastore,
-		ISODatastore: vcCfg.VCenter.ISODatastore,
+		Datacenter:       vcCfg.VCenter.Datacenter,
+		Folder:           v.Folder,
+		ResourcePool:     v.ResourcePool,
+		Datastore:        v.Datastore,
+		ISODatastore:     vcCfg.VCenter.ISODatastore,
+		ContentLibrary:   vcCfg.VCenter.ContentLibrary,
+		ContentLibraryID: vcCfg.VCenter.ContentLibraryID,
 	}
 	if cfg.Profile == "" {
 		cfg.Profile = "ubuntu"

@@ -198,7 +198,7 @@ Note: The library API consumes an in-memory `bootstrap.VMConfig` and has no SOPS
 
 ## Config Files
 
-- `configs/vcenter.sops.yaml`: vCenter connection + default placement settings.
+- `configs/vcenter.sops.yaml`: vCenter connection + default placement settings + Talos content library (`content_library`/`content_library_id`).
 - `configs/vm.*.sops.yaml`: per-VM runtime config (profile, compute, network, auth).
 - `configs/vm.example.yaml`: template for new VM config files.
 - `configs/talos.schematics.sops.yaml`: Talos Image Factory schematic catalog used by Talos profile flow.

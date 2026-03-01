@@ -22,6 +22,10 @@ func menuLabel(tag, text string) string {
 	return wizard.FormatMenuLabel(tag, text, 13)
 }
 
+func colorizeMenuLabel(label, color string) string {
+	return wizard.Colorize(label, color)
+}
+
 func runManager() error {
 	for {
 		warnings := checkRequiredFiles()
@@ -76,8 +80,14 @@ func buildMenuItems() []menuItem {
 	_, vcenterErr := os.Stat("configs/vcenter.sops.yaml")
 	vcenterExists := vcenterErr == nil
 
+	vcenterTag := "vcenter"
+	vcenterText := "Manage vcenter.sops.yaml"
+	if !vcenterExists {
+		vcenterTag = "+vcenter"
+		vcenterText = "Create vcenter.sops.yaml"
+	}
 	items = append(items, menuItem{
-		label: menuLabel("vcenter", "Manage vcenter.sops.yaml"),
+		label: menuLabel(vcenterTag, vcenterText),
 		action: func() error {
 			if _, err := os.Stat("configs/vcenter.sops.yaml"); err == nil {
 				return editVCenterConfig("configs/vcenter.sops.yaml")
@@ -96,27 +106,30 @@ func buildMenuItems() []menuItem {
 		})
 	}
 
-	items = append(items, menuItem{
-		label:  menuLabel("schematic", "Manage talos.schematics.sops.yaml"),
-		action: runTalosConfigWizard,
-	})
+	schematicTag := "schematic"
+	schematicText := "Manage talos.schematics.sops.yaml"
+	if _, err := os.Stat("configs/talos.schematics.sops.yaml"); err != nil {
+		schematicTag = "+schematic"
+		schematicText = "Create talos.schematics.sops.yaml"
+	}
+	items = append(items, menuItem{label: menuLabel(schematicTag, schematicText), action: runTalosConfigWizard})
 	drafts := listDrafts(true)
 	for _, d := range drafts {
 		draft := d
 		items = append(items, menuItem{
-			label:  "\033[33m[draft]\033[0m    Resume " + draft.label,
+			label:  colorizeMenuLabel(menuLabel("draft", "Resume "+draft.label), "\033[33m"),
 			action: func() error { return resumeDraft(draft) },
 		})
 		items = append(items, menuItem{
-			label:  "\033[31m[draft]\033[0m    Delete " + draft.label,
+			label:  colorizeMenuLabel(menuLabel("draft", "Delete "+draft.label), "\033[31m"),
 			action: func() error { return deleteDraft(draft.path) },
 		})
 	}
 
 	if vcenterExists {
-		items = append(items, menuItem{label: menuLabel("vm", "Create new VM"), action: runCreateWizard})
+		items = append(items, menuItem{label: menuLabel("+vm", "Create new VM"), action: runCreateWizard})
 	}
-	items = append(items, menuItem{label: "Exit", action: nil})
+	items = append(items, menuItem{label: menuLabel("", "Exit"), action: nil})
 
 	return items
 }

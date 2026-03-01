@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -67,16 +69,18 @@ type VMWizardOutput struct {
 // vcenterFileConfig is the YAML structure for vcenter.sops.yaml.
 type vcenterFileConfig struct {
 	VCenter struct {
-		Host         string `yaml:"host"`
-		Username     string `yaml:"username"`
-		Password     string `yaml:"password"`
-		Datacenter   string `yaml:"datacenter"`
-		ISODatastore string `yaml:"iso_datastore"`
-		Folder       string `yaml:"folder"`        // default VM folder for new VMs
-		ResourcePool string `yaml:"resource_pool"` // default resource pool for new VMs
-		Network      string `yaml:"network"`       // default network for new VMs
-		Port         int    `yaml:"port"`
-		Insecure     bool   `yaml:"insecure"`
+		Host             string `yaml:"host"`
+		Username         string `yaml:"username"`
+		Password         string `yaml:"password"`
+		Datacenter       string `yaml:"datacenter"`
+		ContentLibrary   string `yaml:"content_library,omitempty"`
+		ContentLibraryID string `yaml:"content_library_id,omitempty"`
+		ISODatastore     string `yaml:"iso_datastore"`
+		Folder           string `yaml:"folder"`        // default VM folder for new VMs
+		ResourcePool     string `yaml:"resource_pool"` // default resource pool for new VMs
+		Network          string `yaml:"network"`       // default network for new VMs
+		Port             int    `yaml:"port"`
+		Insecure         bool   `yaml:"insecure"`
 	} `yaml:"vcenter"`
 }
 
@@ -88,6 +92,119 @@ type datastoreCandidate struct {
 	LatencyMs    float64
 	Score        float64
 	Rationale    string
+}
+
+func listVCenterContentLibraries(vc *vcenterFileConfig, timeout time.Duration) ([]string, error) {
+	if vc == nil {
+		return nil, fmt.Errorf("vcenter config is nil")
+	}
+	v := vc.VCenter
+	if strings.TrimSpace(v.Host) == "" || strings.TrimSpace(v.Username) == "" || strings.TrimSpace(v.Password) == "" {
+		return nil, fmt.Errorf("missing vcenter host/username/password")
+	}
+	if _, err := exec.LookPath("govc"); err != nil {
+		return nil, fmt.Errorf("govc not found")
+	}
+	url := strings.TrimSpace(v.Host)
+	if !strings.Contains(url, "://") {
+		port := v.Port
+		if port == 0 {
+			port = 443
+		}
+		url = fmt.Sprintf("https://%s:%d/sdk", strings.TrimSpace(v.Host), port)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "govc", "library.ls")
+	cmd.Env = append(os.Environ(),
+		"GOVC_URL="+url,
+		"GOVC_USERNAME="+v.Username,
+		"GOVC_PASSWORD="+v.Password,
+		fmt.Sprintf("GOVC_INSECURE=%t", v.Insecure),
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(string(out), "\n")
+	seen := map[string]struct{}{}
+	libs := make([]string, 0, len(lines))
+	for _, line := range lines {
+		s := strings.TrimSpace(line)
+		if s == "" {
+			continue
+		}
+		parts := strings.Split(s, "/")
+		name := strings.TrimSpace(parts[len(parts)-1])
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		libs = append(libs, name)
+	}
+	sort.Strings(libs)
+	return libs, nil
+}
+
+func selectContentLibraryInteractive(vc *vcenterFileConfig, currentName, currentID string) (string, string) {
+	const (
+		createOption = "Create new library..."
+		idOption     = "Use explicit library ID (advanced)..."
+		manualOption = "Manual input..."
+		backOption   = "Back"
+	)
+	libs, err := listVCenterContentLibraries(vc, 20*time.Second)
+	if err != nil {
+		fmt.Printf("  ⚠ Could not list content libraries: %v\n", err)
+		name := strings.TrimSpace(readLine("Talos content library", currentName))
+		id := strings.TrimSpace(readLine("Talos content library ID (optional)", currentID))
+		return name, id
+	}
+
+	options := append([]string{}, libs...)
+	options = append(options, createOption, idOption, manualOption, backOption)
+
+	defaultChoice := createOption
+	if strings.TrimSpace(currentID) != "" {
+		defaultChoice = idOption
+	} else if strings.TrimSpace(currentName) != "" {
+		for _, lib := range libs {
+			if lib == currentName {
+				defaultChoice = lib
+				break
+			}
+		}
+		if defaultChoice == createOption {
+			defaultChoice = manualOption
+		}
+	} else if len(libs) > 0 {
+		defaultChoice = libs[0]
+	}
+
+	choice := interactiveSelect(options, defaultChoice, "Talos content library:")
+	switch choice {
+	case backOption:
+		return currentName, currentID
+	case createOption:
+		name := strings.TrimSpace(readLine("New content library name", strOrDefault(currentName, "talos-images")))
+		if name == "" {
+			name = strOrDefault(strings.TrimSpace(currentName), "talos-images")
+		}
+		return name, ""
+	case idOption:
+		id := strings.TrimSpace(readLine("Talos content library ID", currentID))
+		name := strings.TrimSpace(readLine("Talos content library name (optional)", currentName))
+		return name, id
+	case manualOption:
+		name := strings.TrimSpace(readLine("Talos content library", currentName))
+		id := strings.TrimSpace(readLine("Talos content library ID (optional)", currentID))
+		return name, id
+	default:
+		return strings.TrimSpace(choice), ""
+	}
 }
 
 func runVMOSProfileStep(vm *VMWizardOutput) bool {
@@ -360,6 +477,7 @@ func editVCenterConfig(path string) error {
 		v.Password = pw
 	}
 	v.Datacenter = readLine("Datacenter", v.Datacenter)
+	v.ContentLibrary, v.ContentLibraryID = selectContentLibraryInteractive(&cfg, v.ContentLibrary, v.ContentLibraryID)
 
 	readyCat := catalogIfReady(cat, catErr)
 	v.ISODatastore = pickDatastoreFromCatalogWithPrompt(readyCat, v.ISODatastore, "ISO datastore (where Ubuntu + seed ISOs are stored)", "ISO datastore (where Ubuntu + seed ISOs are stored):")
@@ -421,6 +539,7 @@ func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath 
 		v.Password = readPassword("Password")
 	}
 	v.Datacenter = readLine("Datacenter", v.Datacenter)
+	v.ContentLibrary, v.ContentLibraryID = selectContentLibraryInteractive(&cfg, v.ContentLibrary, v.ContentLibraryID)
 	v.Port = readInt("Port", intOrDefault(v.Port, configs.Defaults.VCenter.Port), 1, 65535)
 	v.Insecure = readYesNo("Skip TLS verification? (not recommended)", v.Insecure)
 

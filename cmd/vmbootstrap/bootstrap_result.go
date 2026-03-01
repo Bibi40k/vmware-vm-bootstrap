@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
-	pkgconfig "github.com/Bibi40k/vmware-vm-bootstrap/pkg/config"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/bootstrap"
+	pkgconfig "github.com/Bibi40k/vmware-vm-bootstrap/pkg/config"
 )
 
 func writeBootstrapResult(path string, cfg *bootstrap.VMConfig, sshKeyPath string, sshPort int, vm *bootstrap.VM) error {
