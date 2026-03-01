@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"golang.org/x/term"
@@ -102,6 +104,7 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	netDefault := ""
 	folderDefault := ""
 	poolDefault := ""
+	cidrDefault, startIPDefault, gatewayDefault, dnsDefault := suggestNodeNetworkDefaults()
 	if vcCfg, err := loadVCenterConfig(vcenterConfigFile); err == nil {
 		dsDefault = vcCfg.VCenter.ISODatastore
 		netDefault = vcCfg.VCenter.Network
@@ -115,19 +118,19 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	}
 	plan.Cluster.Name = clusterName
 
-	cidr := strings.TrimSpace(readLine("VMware node network CIDR (real LAN/VLAN, not K8s pod/service)", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
+	cidr := strings.TrimSpace(readLine("VMware node network CIDR (real LAN/VLAN, not K8s pod/service)", strOrDefault(plan.Cluster.Network.CIDR, cidrDefault)))
 	for {
 		if _, err := netip.ParsePrefix(cidr); err == nil {
 			break
 		}
 		fmt.Println("  Invalid CIDR")
-		cidr = strings.TrimSpace(readLine("VMware node network CIDR (real LAN/VLAN, not K8s pod/service)", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
+		cidr = strings.TrimSpace(readLine("VMware node network CIDR (real LAN/VLAN, not K8s pod/service)", strOrDefault(plan.Cluster.Network.CIDR, cidrDefault)))
 	}
 	plan.Cluster.Network.CIDR = cidr
 
-	gateway := readIPLine("Gateway", strOrDefault(plan.Cluster.Network.Gateway, "192.168.110.1"))
-	startIP := readIPLine("Start IP for first node", strOrDefault(plan.Cluster.Network.StartIP, "192.168.110.20"))
-	dns := readIPLine("DNS", strOrDefault(plan.Cluster.Network.DNS, gateway))
+	gateway := readIPLine("Gateway", strOrDefault(plan.Cluster.Network.Gateway, gatewayDefault))
+	startIP := readIPLine("Start IP for first node", strOrDefault(plan.Cluster.Network.StartIP, startIPDefault))
+	dns := readIPLine("DNS", strOrDefault(plan.Cluster.Network.DNS, dnsDefault))
 	dns2 := readLine("Secondary DNS (optional)", plan.Cluster.Network.DNS2)
 	plan.Cluster.Network.Gateway = gateway
 	plan.Cluster.Network.StartIP = startIP
@@ -463,4 +466,66 @@ func ipv4MaskFromPrefix(bits int) string {
 		byte(mask>>8),
 		byte(mask),
 	)
+}
+
+func suggestNodeNetworkDefaults() (cidr string, startIP string, gateway string, dns string) {
+	const (
+		fallbackCIDR    = "192.168.110.0/24"
+		fallbackStartIP = "192.168.110.20"
+		fallbackGateway = "192.168.110.1"
+	)
+
+	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
+	type subnetInfo struct {
+		count   int
+		maxHost int
+	}
+	subnets := map[string]subnetInfo{}
+	for _, p := range vmFiles {
+		vmFile, err := loadVMConfig(p)
+		if err != nil {
+			continue
+		}
+		ip := net.ParseIP(strings.TrimSpace(vmFile.VM.IPAddress))
+		if ip == nil {
+			continue
+		}
+		v4 := ip.To4()
+		if v4 == nil {
+			continue
+		}
+		key := fmt.Sprintf("%d.%d.%d", v4[0], v4[1], v4[2])
+		host := int(v4[3])
+		info := subnets[key]
+		info.count++
+		if host > info.maxHost {
+			info.maxHost = host
+		}
+		subnets[key] = info
+	}
+	if len(subnets) == 0 {
+		return fallbackCIDR, fallbackStartIP, fallbackGateway, fallbackGateway
+	}
+
+	type cand struct {
+		key     string
+		count   int
+		maxHost int
+	}
+	var list []cand
+	for k, v := range subnets {
+		list = append(list, cand{key: k, count: v.count, maxHost: v.maxHost})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].count == list[j].count {
+			return list[i].key < list[j].key
+		}
+		return list[i].count > list[j].count
+	})
+	chosen := list[0]
+	next := chosen.maxHost + 1
+	if next < 20 || next > 250 {
+		next = 20
+	}
+	return chosen.key + ".0/24", fmt.Sprintf("%s.%d", chosen.key, next), chosen.key + ".1", chosen.key + ".1"
 }
