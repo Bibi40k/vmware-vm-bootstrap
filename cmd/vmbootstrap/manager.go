@@ -9,6 +9,7 @@ import (
 	"time"
 
 	survey "github.com/AlecAivazis/survey/v2"
+	"gopkg.in/yaml.v3"
 )
 
 type menuItem struct {
@@ -154,16 +155,7 @@ func listDrafts(all bool) []draftInfo {
 		base := filepath.Base(p)
 		targetBase := strings.Split(base, ".draft.")[0]
 		targetPath := filepath.Join("configs", targetBase)
-		kind := "unknown"
-		if strings.HasPrefix(targetBase, "vm.") {
-			kind = "vm"
-		} else if targetBase == "vcenter.sops.yaml" {
-			kind = "vcenter"
-		} else if strings.HasPrefix(targetBase, "talos.schematics") && strings.HasSuffix(targetBase, ".sops.yaml") {
-			kind = "talos_schematics"
-		} else if strings.HasPrefix(targetBase, "talos.cluster") && strings.HasSuffix(targetBase, ".sops.yaml") {
-			kind = "talos_cluster"
-		}
+		kind := detectDraftKind(p, targetBase)
 		fi, _ := os.Stat(p)
 		mt := time.Time{}
 		if fi != nil {
@@ -200,6 +192,37 @@ func listDrafts(all bool) []draftInfo {
 		drafts = append(drafts, it.info)
 	}
 	return drafts
+}
+
+func detectDraftKind(draftPath, targetBase string) string {
+	// Fast-path by conventional names.
+	if strings.HasPrefix(targetBase, "vm.") {
+		return "vm"
+	}
+	if targetBase == "vcenter.sops.yaml" {
+		return "vcenter"
+	}
+
+	// Content-based detection: no filename constraints.
+	var data map[string]any
+	raw, err := os.ReadFile(draftPath)
+	if err == nil {
+		if err := yaml.Unmarshal(raw, &data); err == nil {
+			if _, ok := data["vm"]; ok {
+				return "vm"
+			}
+			if _, ok := data["vcenter"]; ok {
+				return "vcenter"
+			}
+			if _, ok := data["talos"]; ok {
+				return "talos_schematics"
+			}
+			if _, ok := data["cluster"]; ok {
+				return "talos_cluster"
+			}
+		}
+	}
+	return "unknown"
 }
 
 func deleteDraft(path string) error {
