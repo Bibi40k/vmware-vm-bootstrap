@@ -1200,8 +1200,14 @@ func selectUbuntuVersion(target *string) {
 }
 
 func selectTalosVersion(current string) string {
-	defaultVersion := strOrDefault(strings.TrimSpace(current), strOrDefault(configs.Defaults.Talos.DefaultVersion, "v1.12.0"))
-	if !strings.HasPrefix(defaultVersion, "v") {
+	defaultVersion := strings.TrimSpace(current)
+	if defaultVersion == "" {
+		defaultVersion = strings.TrimSpace(configs.Defaults.Talos.DefaultVersion)
+	}
+	if defaultVersion == "" && len(configs.TalosReleases.Versions) > 0 {
+		defaultVersion = strings.TrimSpace(configs.TalosReleases.Versions[0])
+	}
+	if defaultVersion != "" && !strings.HasPrefix(defaultVersion, "v") {
 		defaultVersion = "v" + defaultVersion
 	}
 

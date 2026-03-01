@@ -37,6 +37,7 @@ func init() {
 	if err := yaml.Unmarshal(defaultsYAML, &Defaults); err != nil {
 		panic("vmware-vm-bootstrap: invalid defaults.yaml: " + err.Error())
 	}
+	applyBuiltinFallbacks(&Defaults)
 	if err := yaml.Unmarshal(releasesYAML, &UbuntuReleases); err != nil {
 		panic("vmware-vm-bootstrap: invalid ubuntu-releases.yaml: " + err.Error())
 	}
@@ -45,6 +46,58 @@ func init() {
 	}
 	if err := yaml.Unmarshal(talosExtensionsYAML, &TalosExtensions); err != nil {
 		panic("vmware-vm-bootstrap: invalid talos-extensions.yaml: " + err.Error())
+	}
+}
+
+// applyBuiltinFallbacks keeps one central safety net if defaults.yaml misses fields.
+func applyBuiltinFallbacks(d *LibDefaults) {
+	if d == nil {
+		return
+	}
+	if d.Talos.DefaultVersion == "" {
+		d.Talos.DefaultVersion = "v1.12.4"
+	}
+	if d.Talos.DefaultCluster == "" {
+		d.Talos.DefaultCluster = "dev"
+	}
+	if d.Talos.DefaultTimeoutM <= 0 {
+		d.Talos.DefaultTimeoutM = 45
+	}
+	if d.Talos.PlanNetwork.CIDR == "" {
+		d.Talos.PlanNetwork.CIDR = "192.168.110.0/24"
+	}
+	if d.Talos.PlanNetwork.StartIP == "" {
+		d.Talos.PlanNetwork.StartIP = "192.168.110.20"
+	}
+	if d.Talos.PlanNetwork.Gateway == "" {
+		d.Talos.PlanNetwork.Gateway = "192.168.110.1"
+	}
+	if d.Talos.PlanNetwork.DNS == "" {
+		d.Talos.PlanNetwork.DNS = d.Talos.PlanNetwork.Gateway
+	}
+	if d.Talos.PlanNodeTypes.Controlplane.CPUs <= 0 {
+		d.Talos.PlanNodeTypes.Controlplane.CPUs = 4
+	}
+	if d.Talos.PlanNodeTypes.Controlplane.MemoryGB <= 0 {
+		d.Talos.PlanNodeTypes.Controlplane.MemoryGB = 8
+	}
+	if d.Talos.PlanNodeTypes.Controlplane.DiskSizeG <= 0 {
+		d.Talos.PlanNodeTypes.Controlplane.DiskSizeG = 60
+	}
+	if d.Talos.PlanNodeTypes.Worker.CPUs <= 0 {
+		d.Talos.PlanNodeTypes.Worker.CPUs = 8
+	}
+	if d.Talos.PlanNodeTypes.Worker.MemoryGB <= 0 {
+		d.Talos.PlanNodeTypes.Worker.MemoryGB = 16
+	}
+	if d.Talos.PlanNodeTypes.Worker.DiskSizeG <= 0 {
+		d.Talos.PlanNodeTypes.Worker.DiskSizeG = 100
+	}
+	if d.Talos.PlanLayout.ControlplaneCount <= 0 {
+		d.Talos.PlanLayout.ControlplaneCount = 3
+	}
+	if d.Talos.PlanLayout.WorkerCount < 0 {
+		d.Talos.PlanLayout.WorkerCount = 2
 	}
 }
 
