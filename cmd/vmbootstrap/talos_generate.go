@@ -115,13 +115,13 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	}
 	plan.Cluster.Name = clusterName
 
-	cidr := strings.TrimSpace(readLine("Network CIDR", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
+	cidr := strings.TrimSpace(readLine("VMware node network CIDR (real LAN/VLAN, not K8s pod/service)", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
 	for {
 		if _, err := netip.ParsePrefix(cidr); err == nil {
 			break
 		}
 		fmt.Println("  Invalid CIDR")
-		cidr = strings.TrimSpace(readLine("Network CIDR", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
+		cidr = strings.TrimSpace(readLine("VMware node network CIDR (real LAN/VLAN, not K8s pod/service)", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
 	}
 	plan.Cluster.Network.CIDR = cidr
 
