@@ -8,6 +8,14 @@ Highlights:
 Notes:
 - TBD
 
+## v0.2.3 (2026-03-01)
+
+Highlights:
+- VM config editor now offers renaming `configs/vm.*.sops.yaml` to match updated `vm.name`.
+
+Notes:
+- Prevents menu confusion where filename stayed on old VM name after edit.
+
 ## v0.2.2 (2026-03-01)
 
 Highlights:
