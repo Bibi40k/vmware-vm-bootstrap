@@ -15,6 +15,9 @@ func TestDefaultsLoaded(t *testing.T) {
 		{"VM.Firmware", Defaults.VM.Firmware, "bios"},
 		{"VM.GuestOS", Defaults.VM.GuestOS, "ubuntu64Guest"},
 		{"Network.Interface", Defaults.Network.Interface, "ens192"},
+		{"Talos.DefaultVersion", Defaults.Talos.DefaultVersion, "v1.12.4"},
+		{"Talos.DefaultCluster", Defaults.Talos.DefaultCluster, "dev"},
+		{"Talos.DefaultTimeoutM", Defaults.Talos.DefaultTimeoutM, 45},
 		{"CloudInit.Locale", Defaults.CloudInit.Locale, "en_US.UTF-8"},
 		{"CloudInit.Timezone", Defaults.CloudInit.Timezone, "UTC"},
 		{"ISO.NoCloudVolumeID", Defaults.ISO.NoCloudVolumeID, "CIDATA"},
@@ -27,6 +30,13 @@ func TestDefaultsLoaded(t *testing.T) {
 				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTalosPlanNetworkDefaultsLoaded(t *testing.T) {
+	n := Defaults.Talos.PlanNetwork
+	if n.CIDR == "" || n.StartIP == "" || n.Gateway == "" || n.DNS == "" {
+		t.Fatalf("talos.plan_network defaults must be fully populated, got %+v", n)
 	}
 }
 

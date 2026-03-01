@@ -12,6 +12,28 @@ vm:
 network:
   interface: ens192  # Default NIC name on VMware (govmomi assigns this)
 
+talos:
+  default_version: v1.12.4
+  default_cluster_name: dev
+  default_timeout_minutes: 45
+  plan_network:
+    cidr: 192.168.110.0/24
+    start_ip: 192.168.110.20
+    gateway: 192.168.110.1
+    dns: 192.168.110.1
+  plan_node_types:
+    controlplane:
+      cpus: 4
+      memory_gb: 8
+      disk_size_gb: 60
+    worker:
+      cpus: 8
+      memory_gb: 16
+      disk_size_gb: 100
+  plan_layout:
+    controlplane_count: 3
+    worker_count: 2
+
 cloudinit:
   locale: en_US.UTF-8
   timezone: UTC

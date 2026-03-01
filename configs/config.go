@@ -53,6 +53,7 @@ type LibDefaults struct {
 	VCenter   VCenterDefaults   `yaml:"vcenter"`
 	VM        VMDefaults        `yaml:"vm"`
 	Network   NetworkDefaults   `yaml:"network"`
+	Talos     TalosDefaults     `yaml:"talos"`
 	CloudInit CloudInitDefaults `yaml:"cloudinit"`
 	Timeouts  TimeoutDefaults   `yaml:"timeouts"`
 	ISO       ISODefaults       `yaml:"iso"`
@@ -73,6 +74,39 @@ type VMDefaults struct {
 // NetworkDefaults holds network configuration defaults.
 type NetworkDefaults struct {
 	Interface string `yaml:"interface"`
+}
+
+// TalosDefaults holds Talos-specific defaults used by wizards.
+type TalosDefaults struct {
+	DefaultVersion  string             `yaml:"default_version"`
+	DefaultCluster  string             `yaml:"default_cluster_name"`
+	DefaultTimeoutM int                `yaml:"default_timeout_minutes"`
+	PlanNetwork     TalosPlanNetwork   `yaml:"plan_network"`
+	PlanNodeTypes   TalosPlanNodeTypes `yaml:"plan_node_types"`
+	PlanLayout      TalosPlanLayout    `yaml:"plan_layout"`
+}
+
+type TalosPlanNetwork struct {
+	CIDR    string `yaml:"cidr"`
+	StartIP string `yaml:"start_ip"`
+	Gateway string `yaml:"gateway"`
+	DNS     string `yaml:"dns"`
+}
+
+type TalosPlanNodeTypeDefaults struct {
+	CPUs      int `yaml:"cpus"`
+	MemoryGB  int `yaml:"memory_gb"`
+	DiskSizeG int `yaml:"disk_size_gb"`
+}
+
+type TalosPlanNodeTypes struct {
+	Controlplane TalosPlanNodeTypeDefaults `yaml:"controlplane"`
+	Worker       TalosPlanNodeTypeDefaults `yaml:"worker"`
+}
+
+type TalosPlanLayout struct {
+	ControlplaneCount int `yaml:"controlplane_count"`
+	WorkerCount       int `yaml:"worker_count"`
 }
 
 // CloudInitDefaults holds cloud-init configuration defaults.

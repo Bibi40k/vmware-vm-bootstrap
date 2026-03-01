@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bibi40k/vmware-vm-bootstrap/configs"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
@@ -127,9 +128,9 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 		}
 	}
 
-	clusterName := strings.TrimSpace(readLine("Cluster name", strOrDefault(plan.Cluster.Name, "dev")))
+	clusterName := strings.TrimSpace(readLine("Cluster name", strOrDefault(plan.Cluster.Name, strOrDefault(configs.Defaults.Talos.DefaultCluster, "dev"))))
 	if clusterName == "" {
-		clusterName = "dev"
+		clusterName = strOrDefault(configs.Defaults.Talos.DefaultCluster, "dev")
 	}
 	plan.Cluster.Name = clusterName
 
@@ -152,8 +153,8 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	plan.Cluster.Network.DNS = dns
 	plan.Cluster.Network.DNS2 = dns2
 
-	currentCP := 3
-	currentWK := 2
+	currentCP := intOrDefault(configs.Defaults.Talos.PlanLayout.ControlplaneCount, 3)
+	currentWK := intOrDefault(configs.Defaults.Talos.PlanLayout.WorkerCount, 2)
 	for _, l := range plan.Cluster.Layout {
 		switch l.Type {
 		case "controlplane":
@@ -169,7 +170,7 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	}
 
 	fmt.Println()
-	currentTalosVersion := "v1.12.4"
+	currentTalosVersion := strOrDefault(configs.Defaults.Talos.DefaultVersion, "v1.12.4")
 	currentSchematic := ""
 	if t, ok := plan.Cluster.NodeTypes["controlplane"]; ok {
 		if strings.TrimSpace(t.TalosVersion) != "" {
@@ -189,21 +190,21 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 
 	fmt.Println()
 	cpDefault := plan.Cluster.NodeTypes["controlplane"]
-	cpCPU := readInt("Controlplane CPU cores", intOrDefault(cpDefault.CPUs, 4), 1, 128)
-	cpRAMGB := readInt("Controlplane RAM (GB)", intOrDefault(cpDefault.MemoryMB/1024, 8), 1, 2048)
-	cpDiskGB := readInt("Controlplane OS disk (GB)", intOrDefault(cpDefault.DiskSizeGB, 60), 10, 4096)
+	cpCPU := readInt("Controlplane CPU cores", intOrDefault(cpDefault.CPUs, intOrDefault(configs.Defaults.Talos.PlanNodeTypes.Controlplane.CPUs, 4)), 1, 128)
+	cpRAMGB := readInt("Controlplane RAM (GB)", intOrDefault(cpDefault.MemoryMB/1024, intOrDefault(configs.Defaults.Talos.PlanNodeTypes.Controlplane.MemoryGB, 8)), 1, 2048)
+	cpDiskGB := readInt("Controlplane OS disk (GB)", intOrDefault(cpDefault.DiskSizeGB, intOrDefault(configs.Defaults.Talos.PlanNodeTypes.Controlplane.DiskSizeG, 60)), 10, 4096)
 
 	workerDefault := plan.Cluster.NodeTypes["worker"]
-	workerCPU := readInt("Worker CPU cores", intOrDefault(workerDefault.CPUs, 8), 1, 128)
-	workerRAMGB := readInt("Worker RAM (GB)", intOrDefault(workerDefault.MemoryMB/1024, 16), 1, 2048)
-	workerDiskGB := readInt("Worker OS disk (GB)", intOrDefault(workerDefault.DiskSizeGB, 100), 10, 4096)
+	workerCPU := readInt("Worker CPU cores", intOrDefault(workerDefault.CPUs, intOrDefault(configs.Defaults.Talos.PlanNodeTypes.Worker.CPUs, 8)), 1, 128)
+	workerRAMGB := readInt("Worker RAM (GB)", intOrDefault(workerDefault.MemoryMB/1024, intOrDefault(configs.Defaults.Talos.PlanNodeTypes.Worker.MemoryGB, 16)), 1, 2048)
+	workerDiskGB := readInt("Worker OS disk (GB)", intOrDefault(workerDefault.DiskSizeGB, intOrDefault(configs.Defaults.Talos.PlanNodeTypes.Worker.DiskSizeG, 100)), 10, 4096)
 
 	fmt.Println()
 	defaultDatastore := pickDatastoreFromCatalog(catalogIfReady(cat, catErr), strOrDefault(plan.Cluster.Defaults.Datastore, dsDefault))
 	defaultNetwork := pickNetworkFromCatalog(catalogIfReady(cat, catErr), strOrDefault(plan.Cluster.Defaults.NetworkName, netDefault))
 	defaultFolder := pickFolderFromCatalog(catalogIfReady(cat, catErr), strOrDefault(plan.Cluster.Defaults.Folder, folderDefault))
 	defaultPool := pickResourcePoolFromCatalog(catalogIfReady(cat, catErr), strOrDefault(plan.Cluster.Defaults.ResourcePool, poolDefault))
-	timeoutMinutes := readInt("Node timeout (minutes)", intOrDefault(plan.Cluster.Defaults.TimeoutMins, 45), 1, 240)
+	timeoutMinutes := readInt("Node timeout (minutes)", intOrDefault(plan.Cluster.Defaults.TimeoutMins, intOrDefault(configs.Defaults.Talos.DefaultTimeoutM, 45)), 1, 240)
 
 	plan.Cluster.Defaults.Datastore = defaultDatastore
 	plan.Cluster.Defaults.NetworkName = defaultNetwork
@@ -484,11 +485,10 @@ func ipv4MaskFromPrefix(bits int) string {
 }
 
 func suggestNodeNetworkDefaults() (cidr string, startIP string, gateway string, dns string) {
-	const (
-		fallbackCIDR    = "192.168.110.0/24"
-		fallbackStartIP = "192.168.110.20"
-		fallbackGateway = "192.168.110.1"
-	)
+	fallbackCIDR := strOrDefault(configs.Defaults.Talos.PlanNetwork.CIDR, "192.168.110.0/24")
+	fallbackStartIP := strOrDefault(configs.Defaults.Talos.PlanNetwork.StartIP, "192.168.110.20")
+	fallbackGateway := strOrDefault(configs.Defaults.Talos.PlanNetwork.Gateway, "192.168.110.1")
+	fallbackDNS := strOrDefault(configs.Defaults.Talos.PlanNetwork.DNS, fallbackGateway)
 
 	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
 	type subnetInfo struct {
@@ -519,7 +519,7 @@ func suggestNodeNetworkDefaults() (cidr string, startIP string, gateway string, 
 		subnets[key] = info
 	}
 	if len(subnets) == 0 {
-		return fallbackCIDR, fallbackStartIP, fallbackGateway, fallbackGateway
+		return fallbackCIDR, fallbackStartIP, fallbackGateway, fallbackDNS
 	}
 
 	type cand struct {
