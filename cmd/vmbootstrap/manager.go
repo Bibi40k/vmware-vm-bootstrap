@@ -104,18 +104,6 @@ func buildMenuItems() []menuItem {
 			action: runTalosConfigWizard,
 		})
 	}
-	if _, err := os.Stat(talosClusterPlanDefaultPath); err == nil {
-		items = append(items, menuItem{
-			label:  "[talos]    Generate node vm.* configs",
-			action: runTalosGeneratePrompt,
-		})
-	} else {
-		items = append(items, menuItem{
-			label:  "[+talos]   Generate node vm.* configs",
-			action: runTalosGeneratePrompt,
-		})
-	}
-
 	drafts := listDrafts(true)
 	for _, d := range drafts {
 		draft := d
@@ -176,6 +164,9 @@ func listDrafts(all bool) []draftInfo {
 	var drafts []draftInfo
 	if all {
 		for _, it := range items {
+			if it.info.kind == "unknown" {
+				continue
+			}
 			it.info.label = it.info.label + " (" + filepath.Base(it.info.path) + ")"
 			drafts = append(drafts, it.info)
 		}
@@ -209,9 +200,6 @@ func detectDraftKind(draftPath, targetBase string) string {
 			if _, ok := data["talos"]; ok {
 				return "talos_schematics"
 			}
-			if _, ok := data["cluster"]; ok {
-				return "talos_cluster"
-			}
 		}
 	}
 	return "unknown"
@@ -233,15 +221,13 @@ func resumeDraft(d draftInfo) error {
 		return runCreateWizardWithDraft(d.targetPath, d.path)
 	case "talos_schematics":
 		return runTalosConfigWizardWithDraft(d.path)
-	case "talos_cluster":
-		return createTalosPlanInteractive(d.targetPath, d.path)
 	default:
 		return fmt.Errorf("unknown draft type: %s", d.label)
 	}
 }
 
 func runBootstrapSelector() error {
-	selectedPath, selectedLabel, err := selectNonTalosVMConfig("\033[1mvmbootstrap\033[0m — Bootstrap VM", "Select non-Talos VM config to bootstrap:")
+	selectedPath, selectedLabel, err := selectVMConfig("\033[1mvmbootstrap\033[0m — Bootstrap VM", "Select VM config to bootstrap:")
 	if err != nil {
 		return err
 	}
@@ -253,57 +239,6 @@ func runBootstrapSelector() error {
 		return nil
 	}
 	return bootstrapVM(selectedPath, bootstrapResultPath)
-}
-
-func selectNonTalosVMConfig(title, prompt string) (string, string, error) {
-	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
-	var nonTalosPaths []string
-	var nonTalosLabels []string
-	for _, p := range vmFiles {
-		vmFile, err := loadVMConfig(p)
-		if err != nil {
-			continue
-		}
-		profile := strings.TrimSpace(vmFile.VM.Profile)
-		if profile == "" {
-			profile = "ubuntu"
-		}
-		if profile == "talos" {
-			continue
-		}
-		nonTalosPaths = append(nonTalosPaths, p)
-		nonTalosLabels = append(nonTalosLabels, filepath.Base(p))
-	}
-	if len(nonTalosPaths) == 0 {
-		fmt.Println("\n  No non-Talos VM configs found in configs/vm.*.sops.yaml")
-		fmt.Println("  For Talos nodes use: make node-create")
-		return "", "", nil
-	}
-
-	options := append([]string{}, nonTalosLabels...)
-	options = append(options, "Exit")
-
-	fmt.Printf("\n%s\n%s\n", title, strings.Repeat("─", 50))
-	var selected string
-	if err := survey.AskOne(&survey.Select{
-		Message: prompt,
-		Options: options,
-		Default: nonTalosLabels[0],
-	}, &selected); err != nil {
-		return "", "", nil
-	}
-	drainStdin()
-	if selected == "Exit" {
-		fmt.Println()
-		return "", "", nil
-	}
-	fmt.Println()
-	for i, label := range nonTalosLabels {
-		if label == selected {
-			return nonTalosPaths[i], selected, nil
-		}
-	}
-	return "", "", nil
 }
 
 func selectVMConfig(title, prompt string) (string, string, error) {
