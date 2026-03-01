@@ -204,6 +204,39 @@ type vmAccessStepOptions struct {
 	AllowPasswordDefault       bool
 }
 
+type vmSummarySaveOptions struct {
+	ConfirmPrompt   string
+	CancelMessage   string
+	SaveErrorPrefix string
+	DraftPath       string
+	SuccessLabel    string
+	PostSave        func(string)
+}
+
+func runVMSummaryAndSave(targetPath string, vm VMWizardOutput, opts vmSummarySaveOptions) error {
+	fmt.Println("Summary")
+	printSummary(vm)
+
+	if !readYesNo(strOrDefault(opts.ConfirmPrompt, "Save and re-encrypt?"), true) {
+		fmt.Println(strOrDefault(opts.CancelMessage, "  Cancelled — no changes saved."))
+		return nil
+	}
+
+	if err := saveAndEncrypt(targetPath, vm, opts.DraftPath); err != nil {
+		if strings.TrimSpace(opts.SaveErrorPrefix) != "" {
+			return fmt.Errorf("%s: %w", opts.SaveErrorPrefix, err)
+		}
+		return err
+	}
+
+	successLabel := strOrDefault(opts.SuccessLabel, targetPath)
+	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", successLabel)
+	if opts.PostSave != nil {
+		opts.PostSave(targetPath)
+	}
+	return nil
+}
+
 func runVMAccessStep(vm *VMWizardOutput, opts vmAccessStepOptions) {
 	if vm == nil {
 		return
@@ -480,19 +513,13 @@ func editVMConfig(path string) error {
 		UseChangePasswordFlow: true,
 	})
 
-	fmt.Println("Summary")
-	printSummary(cfg)
-
-	if !readYesNo("Save and re-encrypt?", true) {
-		fmt.Println("  Cancelled — no changes saved.")
-		return nil
-	}
-
-	if err := saveAndEncrypt(path, cfg, ""); err != nil {
+	if err := runVMSummaryAndSave(path, cfg, vmSummarySaveOptions{
+		ConfirmPrompt: "Save and re-encrypt?",
+		CancelMessage: "  Cancelled — no changes saved.",
+		SuccessLabel:  filepath.Base(path),
+	}); err != nil {
 		return err
 	}
-
-	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", filepath.Base(path))
 	return nil
 }
 
@@ -707,23 +734,20 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 
 	out.VM.TimeoutMinutes = 45
 
-	// Summary
-	fmt.Println("Summary")
-	printSummary(out)
-
-	if !readYesNo(fmt.Sprintf("Save to %s?", outputFile), true) {
-		fmt.Println("\033[33mCancelled — configuration not saved.\033[0m")
-		return nil
-	}
-
-	if err := saveAndEncrypt(outputFile, out, draftPath); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
+	if err := runVMSummaryAndSave(outputFile, out, vmSummarySaveOptions{
+		ConfirmPrompt:   fmt.Sprintf("Save to %s?", outputFile),
+		CancelMessage:   "\033[33mCancelled — configuration not saved.\033[0m",
+		SaveErrorPrefix: "failed to save config",
+		DraftPath:       draftPath,
+		SuccessLabel:    outputFile,
+		PostSave: func(target string) {
+			fmt.Printf("\n  To bootstrap this VM:\n")
+			fmt.Printf("    make run VM=%s\n\n", target)
+		},
+	}); err != nil {
+		return err
 	}
 	_ = session.Finalize()
-
-	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", outputFile)
-	fmt.Printf("\n  To bootstrap this VM:\n")
-	fmt.Printf("    make run VM=%s\n\n", outputFile)
 	return nil
 }
 
