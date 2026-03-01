@@ -98,44 +98,73 @@ func runTalosConfigWizardWithDraft(draftPath string) error {
 		cfg.Talos.FactoryURL = configs.TalosExtensions.FactoryURL
 	}
 
-	stopDraftHandler := startYAMLDraftHandler(talosSchematicsConfigFile, draftPath, cfg, func() bool {
+	session := NewWizardSession(talosSchematicsConfigFile, draftPath, cfg, func() bool {
 		return strings.TrimSpace(cfg.Talos.FactoryURL) == "" &&
 			strings.TrimSpace(cfg.Talos.Default) == "" &&
 			len(cfg.Talos.Schematics) == 0
 	})
-	defer stopDraftHandler()
+	session.Start()
+	defer session.Stop()
 
 	defaultName := strings.TrimSpace(cfg.Talos.Default)
 	if defaultName == "" {
 		defaultName = "VMware"
 	}
 
-	name := strings.TrimSpace(readLine("Schematic name", defaultName))
-	if wasPromptInterrupted() {
-		fmt.Println("  Cancelled.")
-		return nil
-	}
-	if name == "" {
-		fmt.Println("  Schematic name is required")
-		return nil
-	}
-
-	factoryURL := strings.TrimSpace(readLine("Image Factory URL", cfg.Talos.FactoryURL))
-	if wasPromptInterrupted() {
-		fmt.Println("  Cancelled.")
-		return nil
-	}
-	if factoryURL == "" {
-		factoryURL = configs.TalosExtensions.FactoryURL
-	}
-
-	selected := selectTalosExtensions(
-		configs.TalosExtensions.Extensions,
-		configs.TalosExtensions.RecommendedExtensions,
-		configs.TalosExtensions.DefaultExtensions,
+	var (
+		name       string
+		factoryURL string
+		selected   []string
+		cancelled  bool
 	)
-	if len(selected) == 0 {
-		fmt.Println("  At least one extension is required")
+	if err := runWizardSteps([]WizardStep{
+		{
+			Name: "Schematic Metadata",
+			Run: func() error {
+				name = strings.TrimSpace(readLine("Schematic name", defaultName))
+				if wasPromptInterrupted() {
+					fmt.Println("  Cancelled.")
+					cancelled = true
+					return nil
+				}
+				if name == "" {
+					fmt.Println("  Schematic name is required")
+					cancelled = true
+					return nil
+				}
+				factoryURL = strings.TrimSpace(readLine("Image Factory URL", cfg.Talos.FactoryURL))
+				if wasPromptInterrupted() {
+					fmt.Println("  Cancelled.")
+					cancelled = true
+					return nil
+				}
+				if factoryURL == "" {
+					factoryURL = configs.TalosExtensions.FactoryURL
+				}
+				return nil
+			},
+		},
+		{
+			Name: "System Extensions",
+			Run: func() error {
+				if cancelled {
+					return nil
+				}
+				selected = selectTalosExtensions(
+					configs.TalosExtensions.Extensions,
+					configs.TalosExtensions.RecommendedExtensions,
+					configs.TalosExtensions.DefaultExtensions,
+				)
+				if len(selected) == 0 {
+					fmt.Println("  At least one extension is required")
+				}
+				return nil
+			},
+		},
+	}); err != nil {
+		return err
+	}
+	if cancelled || name == "" || len(selected) == 0 {
 		return nil
 	}
 
@@ -183,7 +212,7 @@ func runTalosConfigWizardWithDraft(draftPath string) error {
 	if err := saveTalosSchematics(talosSchematicsConfigFile, cfg); err != nil {
 		return err
 	}
-	_ = cleanupDrafts(talosSchematicsConfigFile)
+	_ = session.Finalize()
 	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", filepath.Base(talosSchematicsConfigFile))
 	return nil
 }

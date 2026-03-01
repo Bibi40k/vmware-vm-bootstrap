@@ -85,17 +85,18 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	fmt.Println()
 
 	var plan talosClusterPlanFile
-	if loaded, err := loadDraftYAML(draftPath, &plan); err == nil && loaded {
-		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
-	}
-
-	stopDraftHandler := startYAMLDraftHandler(planPath, draftPath, &plan, func() bool {
+	session := NewWizardSession(planPath, draftPath, &plan, func() bool {
 		return strings.TrimSpace(plan.Cluster.Name) == "" &&
 			strings.TrimSpace(plan.Cluster.Network.CIDR) == "" &&
 			len(plan.Cluster.NodeTypes) == 0 &&
 			len(plan.Cluster.Layout) == 0
 	})
-	defer stopDraftHandler()
+	if loaded, err := session.LoadDraft(); err == nil && loaded {
+		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
+	}
+
+	session.Start()
+	defer session.Stop()
 
 	dsDefault := ""
 	netDefault := ""
@@ -225,7 +226,7 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	if err := sopsEncrypt(planPath, data); err != nil {
 		return err
 	}
-	_ = cleanupDrafts(planPath)
+	_ = session.Finalize()
 
 	fmt.Printf("\n\033[32m✓ Saved and encrypted:\033[0m %s\n", filepath.Base(planPath))
 	return nil
