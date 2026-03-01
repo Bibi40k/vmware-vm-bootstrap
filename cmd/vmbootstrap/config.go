@@ -124,6 +124,51 @@ type vmPlacementStepDefaults struct {
 	ShowWarnings bool
 }
 
+type vmSpecsStepOptions struct {
+	NamePrompt                 string
+	AutoNameFromOutputFile     string
+	ExistingDataDiskAlwaysEdit bool
+}
+
+func runVMSpecsStep(vm *VMWizardOutput, opts vmSpecsStepOptions) {
+	if vm == nil {
+		return
+	}
+	fmt.Println("[2/5] VM Specs")
+
+	if vm.VM.Name == "" && strings.TrimSpace(opts.AutoNameFromOutputFile) != "" {
+		vm.VM.Name = strings.TrimSuffix(filepath.Base(opts.AutoNameFromOutputFile), ".sops.yaml")
+		vm.VM.Name = strings.TrimPrefix(vm.VM.Name, "vm.")
+	}
+	vm.VM.Name = readLine(strOrDefault(opts.NamePrompt, "VM name"), vm.VM.Name)
+
+	defaultCPU := intOrDefault(vm.VM.CPUs, 4)
+	vm.VM.CPUs = readInt("CPU cores", defaultCPU, 1, 64)
+	defaultRAM := 16
+	if vm.VM.MemoryMB > 0 {
+		defaultRAM = vm.VM.MemoryMB / 1024
+	}
+	ramGB := readInt("RAM (GB)", defaultRAM, 1, 512)
+	vm.VM.MemoryMB = ramGB * 1024
+	vm.VM.DiskSizeGB = readInt("OS disk (GB)", intOrDefault(vm.VM.DiskSizeGB, 50), 10, 2000)
+
+	if opts.ExistingDataDiskAlwaysEdit && vm.VM.DataDiskSizeGB > 0 {
+		vm.VM.DataDiskSizeGB = readInt("Data disk (GB)", vm.VM.DataDiskSizeGB, 10, 2000)
+		vm.VM.DataDiskMountPath = readLine("Mount point", strOrDefault(vm.VM.DataDiskMountPath, "/data"))
+	} else if readYesNo("Add separate data disk?", vm.VM.DataDiskSizeGB > 0) {
+		defaultData := intOrDefault(vm.VM.DataDiskSizeGB, 500)
+		vm.VM.DataDiskSizeGB = readInt("Data disk (GB)", defaultData, 10, 2000)
+		vm.VM.DataDiskMountPath = readLine("Mount point", strOrDefault(vm.VM.DataDiskMountPath, "/data"))
+	}
+	defaultSwap := configs.Defaults.CloudInit.SwapSizeGB
+	if vm.VM.SwapSizeGB != nil {
+		defaultSwap = *vm.VM.SwapSizeGB
+	}
+	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
+	vm.VM.SwapSizeGB = &swap
+	fmt.Println()
+}
+
 func runVMPlacementStorageStep(vm *VMWizardOutput, resources *VCenterResources, defaults vmPlacementStepDefaults) {
 	if vm == nil {
 		return
@@ -364,26 +409,10 @@ func editVMConfig(path string) error {
 	}
 
 	// === [2] VM Specs ===
-	fmt.Println("[2/5] VM Specs")
-	v.Name = readLine("VM name", v.Name)
-	v.CPUs = readInt("CPU cores", intOrDefault(v.CPUs, 4), 1, 64)
-	ramGB := intOrDefault(v.MemoryMB/1024, 16)
-	v.MemoryMB = readInt("RAM (GB)", ramGB, 1, 512) * 1024
-	v.DiskSizeGB = readInt("OS disk (GB)", intOrDefault(v.DiskSizeGB, 50), 10, 2000)
-	if v.DataDiskSizeGB > 0 {
-		v.DataDiskSizeGB = readInt("Data disk (GB)", v.DataDiskSizeGB, 10, 2000)
-		v.DataDiskMountPath = readLine("Mount point", strOrDefault(v.DataDiskMountPath, "/data"))
-	} else if readYesNo("Add separate data disk?", false) {
-		v.DataDiskSizeGB = readInt("Data disk (GB)", 500, 10, 2000)
-		v.DataDiskMountPath = readLine("Mount point", "/data")
-	}
-	defaultSwap := configs.Defaults.CloudInit.SwapSizeGB
-	if v.SwapSizeGB != nil {
-		defaultSwap = *v.SwapSizeGB
-	}
-	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
-	v.SwapSizeGB = &swap
-	fmt.Println()
+	runVMSpecsStep(&cfg, vmSpecsStepOptions{
+		NamePrompt:                 "VM name",
+		ExistingDataDiskAlwaysEdit: true,
+	})
 
 	// === [3] Placement & Storage ===
 	runVMPlacementStorageStep(&cfg, resources, vmPlacementStepDefaults{})
@@ -617,35 +646,10 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 
 	// === [2] VM Specs ===
 	fmt.Println()
-	fmt.Println("[2/5] VM Specs")
-	if out.VM.Name == "" {
-		out.VM.Name = strings.TrimSuffix(filepath.Base(outputFile), ".sops.yaml")
-		out.VM.Name = strings.TrimPrefix(out.VM.Name, "vm.")
-	}
-	out.VM.Name = readLine("VM name in vCenter", out.VM.Name)
-
-	defaultCPU := intOrDefault(out.VM.CPUs, 4)
-	out.VM.CPUs = readInt("CPU cores", defaultCPU, 1, 64)
-	defaultRAM := 16
-	if out.VM.MemoryMB > 0 {
-		defaultRAM = out.VM.MemoryMB / 1024
-	}
-	ramGB := readInt("RAM (GB)", defaultRAM, 1, 512)
-	out.VM.MemoryMB = ramGB * 1024
-	out.VM.DiskSizeGB = readInt("OS disk (GB)", intOrDefault(out.VM.DiskSizeGB, 50), 10, 2000)
-
-	if readYesNo("Add separate data disk?", out.VM.DataDiskSizeGB > 0) {
-		defaultData := intOrDefault(out.VM.DataDiskSizeGB, 500)
-		out.VM.DataDiskSizeGB = readInt("Data disk (GB)", defaultData, 10, 2000)
-		out.VM.DataDiskMountPath = readLine("Mount point", strOrDefault(out.VM.DataDiskMountPath, "/data"))
-	}
-	defaultSwap := configs.Defaults.CloudInit.SwapSizeGB
-	if out.VM.SwapSizeGB != nil {
-		defaultSwap = *out.VM.SwapSizeGB
-	}
-	swap := readInt("Swap size (GB, 0 = no swap)", defaultSwap, 0, 64)
-	out.VM.SwapSizeGB = &swap
-	fmt.Println()
+	runVMSpecsStep(&out, vmSpecsStepOptions{
+		NamePrompt:             "VM name in vCenter",
+		AutoNameFromOutputFile: outputFile,
+	})
 
 	// === [3] Placement & Storage ===
 	runVMPlacementStorageStep(&out, resources, vmPlacementStepDefaults{
