@@ -348,12 +348,7 @@ func editVMConfig(path string) error {
 	if netErr != nil || vcfgErr != nil || len(networks) == 0 {
 		v.NetworkName = readLine("Network name", v.NetworkName)
 	} else {
-		var netNames []string
-		for _, n := range networks {
-			parts := strings.Split(n.Name, "/")
-			netNames = append(netNames, parts[len(parts)-1])
-		}
-		v.NetworkName = interactiveSelect(netNames, v.NetworkName, "Network:")
+		v.NetworkName = interactiveSelect(vcenterNetworkLeafNames(networks), v.NetworkName, "Network:")
 	}
 	v.NetworkInterface = readLine("Guest NIC name", strOrDefault(v.NetworkInterface, configs.Defaults.Network.Interface))
 	v.IPAddress = readIPLine("IP address", v.IPAddress)
@@ -682,12 +677,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		}
 		out.VM.NetworkName = readLine("Network name", strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network))
 	} else {
-		var netNames []string
-		for _, n := range networks {
-			parts := strings.Split(n.Name, "/")
-			netNames = append(netNames, parts[len(parts)-1])
-		}
-		out.VM.NetworkName = interactiveSelect(netNames, strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
+		out.VM.NetworkName = interactiveSelect(vcenterNetworkLeafNames(networks), strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
 	}
 
 	out.VM.NetworkInterface = readLine("Guest NIC name", strOrDefault(out.VM.NetworkInterface, configs.Defaults.Network.Interface))
