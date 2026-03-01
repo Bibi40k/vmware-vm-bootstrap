@@ -118,6 +118,78 @@ func runVMOSProfileStep(vm *VMWizardOutput) bool {
 	return false
 }
 
+type vmPlacementStepDefaults struct {
+	Folder       string
+	ResourcePool string
+	ShowWarnings bool
+}
+
+func runVMPlacementStorageStep(vm *VMWizardOutput, resources *VCenterResources, defaults vmPlacementStepDefaults) {
+	if vm == nil {
+		return
+	}
+	fmt.Println("[3/5] Placement & Storage")
+	vm.VM.Folder = pickVMFolder(resources, vm.VM.Folder, defaults.Folder)
+	vm.VM.ResourcePool = pickVMResourcePool(resources, vm.VM.ResourcePool, defaults.ResourcePool)
+	fmt.Println()
+
+	requiredGB := float64(vm.VM.DiskSizeGB + vm.VM.DataDiskSizeGB)
+	if resources == nil || resources.DatastoresErr != nil {
+		if defaults.ShowWarnings && resources != nil && resources.DatastoresErr != nil {
+			fmt.Printf("  ⚠ Could not list datastores: %v\n", resources.DatastoresErr)
+		}
+		vm.VM.Datastore = readLine("Datastore", vm.VM.Datastore)
+	} else {
+		vm.VM.Datastore = selectDatastore(resources.Datastores, requiredGB, vm.VM.Datastore)
+	}
+	fmt.Println()
+}
+
+type vmNetworkStepDefaults struct {
+	NetworkName  string
+	Gateway      string
+	DNS          string
+	ShowWarnings bool
+}
+
+func runVMNetworkStep(vm *VMWizardOutput, resources *VCenterResources, defaults vmNetworkStepDefaults) {
+	if vm == nil {
+		return
+	}
+	fmt.Println("[4/5] Network")
+	if resources == nil || resources.NetworksErr != nil || len(resources.Networks) == 0 {
+		if defaults.ShowWarnings && resources != nil && resources.NetworksErr != nil {
+			fmt.Printf("  ⚠ Could not list networks: %v\n", resources.NetworksErr)
+		}
+		vm.VM.NetworkName = readLine("Network name", strOrDefault(vm.VM.NetworkName, defaults.NetworkName))
+	} else {
+		vm.VM.NetworkName = interactiveSelect(vcenterNetworkLeafNames(resources.Networks), strOrDefault(vm.VM.NetworkName, defaults.NetworkName), "Network:")
+	}
+	vm.VM.NetworkInterface = readLine("Guest NIC name", strOrDefault(vm.VM.NetworkInterface, configs.Defaults.Network.Interface))
+	vm.VM.IPAddress = readIPLine("IP address", vm.VM.IPAddress)
+	vm.VM.Netmask = readIPLine("Netmask", strOrDefault(vm.VM.Netmask, "255.255.255.0"))
+	vm.VM.Gateway = readIPLine("Gateway", strOrDefault(vm.VM.Gateway, defaults.Gateway))
+	vm.VM.DNS = readLine("DNS", strOrDefault(vm.VM.DNS, defaults.DNS))
+	vm.VM.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", vm.VM.DNS2)
+	fmt.Println()
+}
+
+func pickVMFolder(resources *VCenterResources, current, fallback string) string {
+	current = strOrDefault(current, fallback)
+	if resources == nil || resources.FoldersErr != nil {
+		return readLine("VM folder", current)
+	}
+	return selectFolder(resources.Folders, current, "VM folder:")
+}
+
+func pickVMResourcePool(resources *VCenterResources, current, fallback string) string {
+	current = strOrDefault(current, fallback)
+	if resources == nil || resources.PoolsErr != nil {
+		return readLine("Resource pool", current)
+	}
+	return selectResourcePool(resources.Pools, current, "Resource pool:")
+}
+
 // ─── Edit existing configs ───────────────────────────────────────────────────
 
 func editVCenterConfig(path string) error {
@@ -314,41 +386,10 @@ func editVMConfig(path string) error {
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
-	fmt.Println("[3/5] Placement & Storage")
-	if resources == nil || resources.FoldersErr != nil {
-		v.Folder = readLine("VM folder", v.Folder)
-	} else {
-		v.Folder = selectFolder(resources.Folders, v.Folder, "VM folder:")
-	}
-	if resources == nil || resources.PoolsErr != nil {
-		v.ResourcePool = readLine("Resource pool", v.ResourcePool)
-	} else {
-		v.ResourcePool = selectResourcePool(resources.Pools, v.ResourcePool, "Resource pool:")
-	}
-	fmt.Println()
-
-	requiredGB := float64(v.DiskSizeGB + v.DataDiskSizeGB)
-	if resources == nil || resources.DatastoresErr != nil {
-		v.Datastore = readLine("Datastore", v.Datastore)
-	} else {
-		v.Datastore = selectDatastore(resources.Datastores, requiredGB, v.Datastore)
-	}
-	fmt.Println()
+	runVMPlacementStorageStep(&cfg, resources, vmPlacementStepDefaults{})
 
 	// === [4] Network ===
-	fmt.Println("[4/5] Network")
-	if resources == nil || resources.NetworksErr != nil || len(resources.Networks) == 0 {
-		v.NetworkName = readLine("Network name", v.NetworkName)
-	} else {
-		v.NetworkName = interactiveSelect(vcenterNetworkLeafNames(resources.Networks), v.NetworkName, "Network:")
-	}
-	v.NetworkInterface = readLine("Guest NIC name", strOrDefault(v.NetworkInterface, configs.Defaults.Network.Interface))
-	v.IPAddress = readIPLine("IP address", v.IPAddress)
-	v.Netmask = readIPLine("Netmask", strOrDefault(v.Netmask, "255.255.255.0"))
-	v.Gateway = readIPLine("Gateway", v.Gateway)
-	v.DNS = readLine("DNS", v.DNS)
-	v.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", v.DNS2)
-	fmt.Println()
+	runVMNetworkStep(&cfg, resources, vmNetworkStepDefaults{})
 
 	// === [5] Access / Node Options ===
 	fmt.Println("[5/5] Access / Node Options")
@@ -607,46 +648,19 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	fmt.Println()
 
 	// === [3] Placement & Storage ===
-	fmt.Println("[3/5] Placement & Storage")
-	if resources.FoldersErr != nil {
-		out.VM.Folder = readLine("VM folder", strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder))
-	} else {
-		out.VM.Folder = selectFolder(resources.Folders, strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder), "VM folder:")
-	}
-	if resources.PoolsErr != nil {
-		out.VM.ResourcePool = readLine("Resource pool", strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool))
-	} else {
-		out.VM.ResourcePool = selectResourcePool(resources.Pools, strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool), "Resource pool:")
-	}
-	fmt.Println()
-
-	requiredGB := float64(out.VM.DiskSizeGB + out.VM.DataDiskSizeGB)
-	if resources.DatastoresErr != nil {
-		fmt.Printf("  ⚠ Could not list datastores: %v\n", resources.DatastoresErr)
-		out.VM.Datastore = readLine("Datastore", out.VM.Datastore)
-	} else {
-		out.VM.Datastore = selectDatastore(resources.Datastores, requiredGB, out.VM.Datastore)
-	}
-	fmt.Println()
+	runVMPlacementStorageStep(&out, resources, vmPlacementStepDefaults{
+		Folder:       vcCfg.VCenter.Folder,
+		ResourcePool: vcCfg.VCenter.ResourcePool,
+		ShowWarnings: true,
+	})
 
 	// === [4] Network (cached from upfront fetch) ===
-	fmt.Println("[4/5] Network")
-	if resources.NetworksErr != nil || len(resources.Networks) == 0 {
-		if resources.NetworksErr != nil {
-			fmt.Printf("  ⚠ Could not list networks: %v\n", resources.NetworksErr)
-		}
-		out.VM.NetworkName = readLine("Network name", strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network))
-	} else {
-		out.VM.NetworkName = interactiveSelect(vcenterNetworkLeafNames(resources.Networks), strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
-	}
-
-	out.VM.NetworkInterface = readLine("Guest NIC name", strOrDefault(out.VM.NetworkInterface, configs.Defaults.Network.Interface))
-	out.VM.IPAddress = readIPLine("IP address", out.VM.IPAddress)
-	out.VM.Netmask = readIPLine("Netmask", strOrDefault(out.VM.Netmask, "255.255.255.0"))
-	out.VM.Gateway = readIPLine("Gateway", strOrDefault(out.VM.Gateway, autoGateway(out.VM.IPAddress)))
-	out.VM.DNS = readLine("DNS", strOrDefault(out.VM.DNS, autoFirstDNS(out.VM.Gateway)))
-	out.VM.DNS2 = readLine("Secondary DNS (optional, Enter to skip)", out.VM.DNS2)
-	fmt.Println()
+	runVMNetworkStep(&out, resources, vmNetworkStepDefaults{
+		NetworkName:  vcCfg.VCenter.Network,
+		Gateway:      autoGateway(out.VM.IPAddress),
+		DNS:          autoFirstDNS(out.VM.Gateway),
+		ShowWarnings: true,
+	})
 
 	// === [5] Access / Node Options ===
 	fmt.Println("[5/5] Access / Node Options")
