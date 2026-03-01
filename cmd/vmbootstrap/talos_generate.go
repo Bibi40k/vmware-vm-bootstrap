@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"golang.org/x/term"
@@ -65,20 +66,48 @@ func runTalosGeneratePrompt() error {
 	if planPath == "" {
 		planPath = talosClusterPlanDefaultPath
 	}
+	planWasCreated := false
 	if _, err := os.Stat(planPath); os.IsNotExist(err) {
-		fmt.Printf("  \033[33mPlan config not found:\033[0m %s\n", planPath)
-		if err := createTalosPlanInteractive(planPath); err != nil {
+		if err := createTalosPlanInteractive(planPath, latestDraftForTarget(planPath)); err != nil {
 			return err
 		}
+		planWasCreated = true
 	}
-	force := readYesNoDanger("Overwrite existing generated VM configs?")
+	force := false
+	if !planWasCreated {
+		force = readYesNoDanger("Overwrite existing generated VM configs?")
+	}
 	return runTalosGenerate(planPath, force)
 }
 
-func createTalosPlanInteractive(planPath string) error {
+func createTalosPlanInteractive(planPath, draftPath string) error {
 	fmt.Printf("\n\033[1mCreate Talos Cluster Plan\033[0m\n")
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
+
+	var plan talosClusterPlanFile
+	if draftPath != "" {
+		if data, err := os.ReadFile(draftPath); err == nil {
+			if err := yaml.Unmarshal(data, &plan); err == nil {
+				fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
+			}
+		}
+	}
+
+	stopDraftHandler := startDraftInterruptHandler(planPath, draftPath, func() ([]byte, bool) {
+		data, err := yaml.Marshal(plan)
+		if err != nil {
+			return nil, false
+		}
+		if strings.TrimSpace(plan.Cluster.Name) == "" &&
+			strings.TrimSpace(plan.Cluster.Network.CIDR) == "" &&
+			len(plan.Cluster.NodeTypes) == 0 &&
+			len(plan.Cluster.Layout) == 0 {
+			return nil, false
+		}
+		return data, true
+	})
+	defer stopDraftHandler()
 
 	dsDefault := ""
 	netDefault := ""
@@ -91,34 +120,58 @@ func createTalosPlanInteractive(planPath string) error {
 		poolDefault = vcCfg.VCenter.ResourcePool
 	}
 
-	clusterName := strings.TrimSpace(readLine("Cluster name", "dev"))
+	clusterName := strings.TrimSpace(readLine("Cluster name", strOrDefault(plan.Cluster.Name, "dev")))
 	if clusterName == "" {
 		clusterName = "dev"
 	}
+	plan.Cluster.Name = clusterName
 
-	cidr := strings.TrimSpace(readLine("Network CIDR", "192.168.110.0/24"))
+	cidr := strings.TrimSpace(readLine("Network CIDR", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
 	for {
 		if _, err := netip.ParsePrefix(cidr); err == nil {
 			break
 		}
 		fmt.Println("  Invalid CIDR")
-		cidr = strings.TrimSpace(readLine("Network CIDR", "192.168.110.0/24"))
+		cidr = strings.TrimSpace(readLine("Network CIDR", strOrDefault(plan.Cluster.Network.CIDR, "192.168.110.0/24")))
 	}
+	plan.Cluster.Network.CIDR = cidr
 
-	gateway := readIPLine("Gateway", "192.168.110.1")
-	startIP := readIPLine("Start IP for first node", "192.168.110.20")
-	dns := readIPLine("DNS", gateway)
-	dns2 := readLine("Secondary DNS (optional)", "")
+	gateway := readIPLine("Gateway", strOrDefault(plan.Cluster.Network.Gateway, "192.168.110.1"))
+	startIP := readIPLine("Start IP for first node", strOrDefault(plan.Cluster.Network.StartIP, "192.168.110.20"))
+	dns := readIPLine("DNS", strOrDefault(plan.Cluster.Network.DNS, gateway))
+	dns2 := readLine("Secondary DNS (optional)", plan.Cluster.Network.DNS2)
+	plan.Cluster.Network.Gateway = gateway
+	plan.Cluster.Network.StartIP = startIP
+	plan.Cluster.Network.DNS = dns
+	plan.Cluster.Network.DNS2 = dns2
 
-	cpCount := readInt("Controlplane count", 3, 0, 99)
-	workerCount := readInt("Worker count", 2, 0, 999)
+	currentCP := 3
+	currentWK := 2
+	for _, l := range plan.Cluster.Layout {
+		switch l.Type {
+		case "controlplane":
+			currentCP = l.Count
+		case "worker":
+			currentWK = l.Count
+		}
+	}
+	cpCount := readInt("Controlplane count", currentCP, 0, 99)
+	workerCount := readInt("Worker count", currentWK, 0, 999)
 	if cpCount+workerCount == 0 {
 		return fmt.Errorf("at least one node is required")
 	}
 
 	fmt.Println()
-	talosVersion := selectTalosVersion("v1.12.4")
-	schematicID := ""
+	currentTalosVersion := "v1.12.4"
+	currentSchematic := ""
+	if t, ok := plan.Cluster.NodeTypes["controlplane"]; ok {
+		if strings.TrimSpace(t.TalosVersion) != "" {
+			currentTalosVersion = strings.TrimSpace(t.TalosVersion)
+		}
+		currentSchematic = strings.TrimSpace(t.SchematicID)
+	}
+	talosVersion := selectTalosVersion(currentTalosVersion)
+	schematicID := currentSchematic
 	for {
 		schematicID = strings.TrimSpace(selectTalosSchematicID(schematicID))
 		if schematicID != "" {
@@ -128,28 +181,23 @@ func createTalosPlanInteractive(planPath string) error {
 	}
 
 	fmt.Println()
-	cpCPU := readInt("Controlplane CPU cores", 4, 1, 128)
-	cpRAMGB := readInt("Controlplane RAM (GB)", 8, 1, 2048)
-	cpDiskGB := readInt("Controlplane OS disk (GB)", 60, 10, 4096)
+	cpDefault := plan.Cluster.NodeTypes["controlplane"]
+	cpCPU := readInt("Controlplane CPU cores", intOrDefault(cpDefault.CPUs, 4), 1, 128)
+	cpRAMGB := readInt("Controlplane RAM (GB)", intOrDefault(cpDefault.MemoryMB/1024, 8), 1, 2048)
+	cpDiskGB := readInt("Controlplane OS disk (GB)", intOrDefault(cpDefault.DiskSizeGB, 60), 10, 4096)
 
-	workerCPU := readInt("Worker CPU cores", 8, 1, 128)
-	workerRAMGB := readInt("Worker RAM (GB)", 16, 1, 2048)
-	workerDiskGB := readInt("Worker OS disk (GB)", 100, 10, 4096)
+	workerDefault := plan.Cluster.NodeTypes["worker"]
+	workerCPU := readInt("Worker CPU cores", intOrDefault(workerDefault.CPUs, 8), 1, 128)
+	workerRAMGB := readInt("Worker RAM (GB)", intOrDefault(workerDefault.MemoryMB/1024, 16), 1, 2048)
+	workerDiskGB := readInt("Worker OS disk (GB)", intOrDefault(workerDefault.DiskSizeGB, 100), 10, 4096)
 
 	fmt.Println()
-	defaultDatastore := readLine("Default datastore", dsDefault)
-	defaultNetwork := readLine("Default network", netDefault)
-	defaultFolder := readLine("Default folder", folderDefault)
-	defaultPool := readLine("Default resource pool", poolDefault)
-	timeoutMinutes := readInt("Node timeout (minutes)", 45, 1, 240)
+	defaultDatastore := readLine("Default datastore", strOrDefault(plan.Cluster.Defaults.Datastore, dsDefault))
+	defaultNetwork := readLine("Default network", strOrDefault(plan.Cluster.Defaults.NetworkName, netDefault))
+	defaultFolder := readLine("Default folder", strOrDefault(plan.Cluster.Defaults.Folder, folderDefault))
+	defaultPool := readLine("Default resource pool", strOrDefault(plan.Cluster.Defaults.ResourcePool, poolDefault))
+	timeoutMinutes := readInt("Node timeout (minutes)", intOrDefault(plan.Cluster.Defaults.TimeoutMins, 45), 1, 240)
 
-	plan := talosClusterPlanFile{}
-	plan.Cluster.Name = clusterName
-	plan.Cluster.Network.CIDR = cidr
-	plan.Cluster.Network.StartIP = startIP
-	plan.Cluster.Network.Gateway = gateway
-	plan.Cluster.Network.DNS = dns
-	plan.Cluster.Network.DNS2 = dns2
 	plan.Cluster.Defaults.Datastore = defaultDatastore
 	plan.Cluster.Defaults.NetworkName = defaultNetwork
 	plan.Cluster.Defaults.Folder = defaultFolder
@@ -189,6 +237,7 @@ func createTalosPlanInteractive(planPath string) error {
 	if err := sopsEncrypt(planPath, data); err != nil {
 		return err
 	}
+	_ = cleanupDrafts(planPath)
 
 	fmt.Printf("\n\033[32m✓ Saved and encrypted:\033[0m %s\n", filepath.Base(planPath))
 	return nil
@@ -201,8 +250,7 @@ func runTalosGenerate(planPath string, force bool) error {
 	}
 	if _, err := os.Stat(planPath); err != nil {
 		if term.IsTerminal(int(os.Stdin.Fd())) {
-			fmt.Printf("  \033[33mPlan config not found:\033[0m %s\n", planPath)
-			if err := createTalosPlanInteractive(planPath); err != nil {
+			if err := createTalosPlanInteractive(planPath, latestDraftForTarget(planPath)); err != nil {
 				return err
 			}
 		} else {
@@ -426,4 +474,30 @@ func ipv4MaskFromPrefix(bits int) string {
 		byte(mask>>8),
 		byte(mask),
 	)
+}
+
+func latestDraftForTarget(targetPath string) string {
+	base := filepath.Base(targetPath)
+	pattern := filepath.Join("tmp", fmt.Sprintf("%s.draft.*.yaml", base))
+	matches, _ := filepath.Glob(pattern)
+	if len(matches) == 0 {
+		return ""
+	}
+	type fileInfo struct {
+		path string
+		mod  int64
+	}
+	var infos []fileInfo
+	for _, p := range matches {
+		st, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		infos = append(infos, fileInfo{path: p, mod: st.ModTime().UnixNano()})
+	}
+	if len(infos) == 0 {
+		return ""
+	}
+	sort.Slice(infos, func(i, j int) bool { return infos[i].mod > infos[j].mod })
+	return infos[0].path
 }

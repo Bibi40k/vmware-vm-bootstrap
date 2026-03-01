@@ -103,10 +103,17 @@ func buildMenuItems() []menuItem {
 			action: runTalosConfigWizard,
 		})
 	}
-	items = append(items, menuItem{
-		label:  "[talos]    Generate node vm.* configs",
-		action: runTalosGeneratePrompt,
-	})
+	if _, err := os.Stat(talosClusterPlanDefaultPath); err == nil {
+		items = append(items, menuItem{
+			label:  "[talos]    Generate node vm.* configs",
+			action: runTalosGeneratePrompt,
+		})
+	} else {
+		items = append(items, menuItem{
+			label:  "[+talos]   Generate node vm.* configs",
+			action: runTalosGeneratePrompt,
+		})
+	}
 
 	drafts := listDrafts(true)
 	for _, d := range drafts {
