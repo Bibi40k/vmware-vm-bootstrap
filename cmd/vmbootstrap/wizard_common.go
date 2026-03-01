@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bibi40k/vmware-vm-bootstrap/internal/wizard"
+	wizard "github.com/Bibi40k/cli-wizard-core"
 	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter"
 	"gopkg.in/yaml.v3"
 )
