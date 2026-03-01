@@ -513,14 +513,71 @@ func editVMConfig(path string) error {
 		UseChangePasswordFlow: true,
 	})
 
-	if err := runVMSummaryAndSave(path, cfg, vmSummarySaveOptions{
+	targetPath := path
+	oldPath := path
+	removeOldAfterSave := false
+	if suggested, ok := suggestedVMConfigPathFromName(cfg.VM.Name); ok {
+		if filepath.Clean(suggested) != filepath.Clean(path) {
+			if readYesNo(fmt.Sprintf("Rename config file to %s to match VM name?", suggested), true) {
+				targetPath = suggested
+				removeOldAfterSave = true
+			}
+		}
+	}
+
+	if err := runVMSummaryAndSave(targetPath, cfg, vmSummarySaveOptions{
 		ConfirmPrompt: "Save and re-encrypt?",
 		CancelMessage: "  Cancelled — no changes saved.",
-		SuccessLabel:  filepath.Base(path),
+		SuccessLabel:  filepath.Base(targetPath),
+		PostSave: func(_ string) {
+			if removeOldAfterSave && filepath.Clean(oldPath) != filepath.Clean(targetPath) {
+				if err := os.Remove(oldPath); err != nil && !os.IsNotExist(err) {
+					fmt.Printf("  \033[33m⚠ Could not remove old config:\033[0m %s (%v)\n", oldPath, err)
+				} else {
+					fmt.Printf("  \033[32m✓ Renamed config:\033[0m %s → %s\n", filepath.Base(oldPath), filepath.Base(targetPath))
+				}
+			}
+		},
 	}); err != nil {
 		return err
 	}
 	return nil
+}
+
+func suggestedVMConfigPathFromName(name string) (string, bool) {
+	slug := sanitizeVMConfigSlug(name)
+	if slug == "" {
+		return "", false
+	}
+	return filepath.Join("configs", fmt.Sprintf("vm.%s.sops.yaml", slug)), true
+}
+
+func sanitizeVMConfigSlug(name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			lastDash = false
+		case r == '-' || r == '_' || r == '.':
+			if !lastDash {
+				b.WriteRune('-')
+				lastDash = true
+			}
+		case r == ' ' || r == '/':
+			if !lastDash {
+				b.WriteRune('-')
+				lastDash = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	return out
 }
 
 // saveAndEncrypt marshals v to YAML, writes to path, and encrypts in-place with SOPS.
