@@ -204,17 +204,19 @@ func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath 
 	fmt.Println()
 
 	cfg := seed
-	if loaded, err := loadDraftYAML(draftPath, &cfg); err == nil && loaded {
-		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
-	}
-	v := &cfg.VCenter
-
-	stopDraftHandler := startYAMLDraftHandler(path, draftPath, &cfg, func() bool {
+	session := NewWizardSession(path, draftPath, &cfg, func() bool {
+		v := cfg.VCenter
 		return strings.TrimSpace(v.Host) == "" &&
 			strings.TrimSpace(v.Username) == "" &&
 			strings.TrimSpace(v.Datacenter) == ""
 	})
-	defer stopDraftHandler()
+	if loaded, err := session.LoadDraft(); err == nil && loaded {
+		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
+	}
+	v := &cfg.VCenter
+
+	session.Start()
+	defer session.Stop()
 
 	v.Host = readLine("Host", v.Host)
 	v.Username = readLine("Username", v.Username)
@@ -300,6 +302,7 @@ func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath 
 	if err := saveAndEncrypt(path, cfg, draftPath); err != nil {
 		return err
 	}
+	_ = session.Finalize()
 
 	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", filepath.Base(path))
 	return nil
@@ -616,7 +619,8 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	fmt.Println()
 
 	var out VMWizardOutput
-	if loaded, err := loadDraftYAML(draftPath, &out); err == nil && loaded {
+	session := NewWizardSession(outputFile, draftPath, &out, nil)
+	if loaded, err := session.LoadDraft(); err == nil && loaded {
 		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
 	}
 
@@ -666,8 +670,9 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		}
 	}
 
-	stopDraftHandler := startYAMLDraftHandler(outputFile, draftPath, &out, nil)
-	defer stopDraftHandler()
+	session.TargetPath = outputFile
+	session.Start()
+	defer session.Stop()
 
 	// Connect to vCenter and fetch all resources upfront (before wizard questions).
 	// This avoids context deadline issues caused by the user taking time to answer prompts.
@@ -816,6 +821,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	if err := saveAndEncrypt(outputFile, out, draftPath); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
+	_ = session.Finalize()
 
 	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", outputFile)
 	fmt.Printf("\n  To bootstrap this VM:\n")
