@@ -114,7 +114,7 @@ func downloadTalosISO(ctx context.Context, version, schematicID string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to download Talos ISO: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to download Talos ISO: unexpected status %d from %s", resp.StatusCode, url)

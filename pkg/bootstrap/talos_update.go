@@ -28,11 +28,11 @@ func UpgradeTalosNode(ctx context.Context, cfg *TalosNodeUpdateConfig) error {
 
 	nodeIP := strings.TrimSpace(cfg.NodeIP)
 	if nodeIP == "" {
-		return fmt.Errorf("NodeIP is required")
+		return fmt.Errorf("nodeIP is required")
 	}
 	version := strings.TrimSpace(cfg.Version)
 	if version == "" {
-		return fmt.Errorf("Version is required")
+		return fmt.Errorf("version is required")
 	}
 	if !strings.HasPrefix(version, "v") {
 		version = "v" + version
