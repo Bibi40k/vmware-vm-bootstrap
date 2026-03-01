@@ -224,7 +224,6 @@ CLI (in addition to library requirements):
 - `genisoimage`
 - `xorriso`
 - `sops` (only for encrypted config files)
-- `talosctl` (for `vmbootstrap node update`)
 
 ## Development
 
@@ -256,10 +255,6 @@ VM management (CLI):
 make config   # interactive config wizard
 make vm-deploy  # bootstrap a VM
 make smoke VM=configs/vm.myvm.sops.yaml  # bootstrap + smoke test (+ cleanup)
-make node-create VM=configs/vm.node01.sops.yaml
-make node-delete VM=configs/vm.node01.sops.yaml
-make node-recreate VM=configs/vm.node01.sops.yaml
-make node-update VM=configs/vm.node01.sops.yaml VERSION=v1.12.0
 ```
 
 ## Releases

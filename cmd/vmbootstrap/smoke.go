@@ -45,7 +45,7 @@ func smokeVM(vmConfigPath string, cleanup bool) error {
 	if profile != "ubuntu" {
 		return &userError{
 			msg:  fmt.Sprintf("smoke is supported only for ubuntu profile (got %q)", profile),
-			hint: "Use 'make node-create' / 'make node-update' for Talos lifecycle operations.",
+			hint: "Use 'make vm-deploy' with ubuntu profile for smoke tests.",
 		}
 	}
 
