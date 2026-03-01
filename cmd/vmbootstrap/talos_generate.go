@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -66,30 +67,130 @@ func runTalosGeneratePrompt() error {
 	}
 	if _, err := os.Stat(planPath); os.IsNotExist(err) {
 		fmt.Printf("  \033[33mPlan config not found:\033[0m %s\n", planPath)
-		if !readYesNo("Create it from example template now?", true) {
-			fmt.Println("  Cancelled.")
-			return nil
-		}
-		if err := createTalosPlanFromExample(planPath); err != nil {
+		if err := createTalosPlanInteractive(planPath); err != nil {
 			return err
 		}
-		fmt.Printf("  \033[32m✓ Created:\033[0m %s\n", planPath)
-		fmt.Println("  Edit values, then run generator again.")
-		return nil
 	}
 	force := readYesNoDanger("Overwrite existing generated VM configs?")
 	return runTalosGenerate(planPath, force)
 }
 
-func createTalosPlanFromExample(planPath string) error {
-	examplePath := filepath.Join("configs", "talos.cluster.example.yaml")
-	plaintext, err := os.ReadFile(examplePath)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", examplePath, err)
+func createTalosPlanInteractive(planPath string) error {
+	fmt.Printf("\n\033[1mCreate Talos Cluster Plan\033[0m\n")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+
+	dsDefault := ""
+	netDefault := ""
+	folderDefault := ""
+	poolDefault := ""
+	if vcCfg, err := loadVCenterConfig(vcenterConfigFile); err == nil {
+		dsDefault = vcCfg.VCenter.ISODatastore
+		netDefault = vcCfg.VCenter.Network
+		folderDefault = vcCfg.VCenter.Folder
+		poolDefault = vcCfg.VCenter.ResourcePool
 	}
-	if err := sopsEncrypt(planPath, plaintext); err != nil {
+
+	clusterName := strings.TrimSpace(readLine("Cluster name", "dev"))
+	if clusterName == "" {
+		clusterName = "dev"
+	}
+
+	cidr := strings.TrimSpace(readLine("Network CIDR", "192.168.110.0/24"))
+	for {
+		if _, err := netip.ParsePrefix(cidr); err == nil {
+			break
+		}
+		fmt.Println("  Invalid CIDR")
+		cidr = strings.TrimSpace(readLine("Network CIDR", "192.168.110.0/24"))
+	}
+
+	gateway := readIPLine("Gateway", "192.168.110.1")
+	startIP := readIPLine("Start IP for first node", "192.168.110.20")
+	dns := readIPLine("DNS", gateway)
+	dns2 := readLine("Secondary DNS (optional)", "")
+
+	cpCount := readInt("Controlplane count", 3, 0, 99)
+	workerCount := readInt("Worker count", 2, 0, 999)
+	if cpCount+workerCount == 0 {
+		return fmt.Errorf("at least one node is required")
+	}
+
+	fmt.Println()
+	talosVersion := selectTalosVersion("v1.12.4")
+	schematicID := ""
+	for {
+		schematicID = strings.TrimSpace(selectTalosSchematicID(schematicID))
+		if schematicID != "" {
+			break
+		}
+		fmt.Println("  Talos schematic ID is required")
+	}
+
+	fmt.Println()
+	cpCPU := readInt("Controlplane CPU cores", 4, 1, 128)
+	cpRAMGB := readInt("Controlplane RAM (GB)", 8, 1, 2048)
+	cpDiskGB := readInt("Controlplane OS disk (GB)", 60, 10, 4096)
+
+	workerCPU := readInt("Worker CPU cores", 8, 1, 128)
+	workerRAMGB := readInt("Worker RAM (GB)", 16, 1, 2048)
+	workerDiskGB := readInt("Worker OS disk (GB)", 100, 10, 4096)
+
+	fmt.Println()
+	defaultDatastore := readLine("Default datastore", dsDefault)
+	defaultNetwork := readLine("Default network", netDefault)
+	defaultFolder := readLine("Default folder", folderDefault)
+	defaultPool := readLine("Default resource pool", poolDefault)
+	timeoutMinutes := readInt("Node timeout (minutes)", 45, 1, 240)
+
+	plan := talosClusterPlanFile{}
+	plan.Cluster.Name = clusterName
+	plan.Cluster.Network.CIDR = cidr
+	plan.Cluster.Network.StartIP = startIP
+	plan.Cluster.Network.Gateway = gateway
+	plan.Cluster.Network.DNS = dns
+	plan.Cluster.Network.DNS2 = dns2
+	plan.Cluster.Defaults.Datastore = defaultDatastore
+	plan.Cluster.Defaults.NetworkName = defaultNetwork
+	plan.Cluster.Defaults.Folder = defaultFolder
+	plan.Cluster.Defaults.ResourcePool = defaultPool
+	plan.Cluster.Defaults.TimeoutMins = timeoutMinutes
+	plan.Cluster.NodeTypes = map[string]talosNodeTypeSpec{
+		"controlplane": {
+			CPUs:         cpCPU,
+			MemoryMB:     cpRAMGB * 1024,
+			DiskSizeGB:   cpDiskGB,
+			TalosVersion: talosVersion,
+			SchematicID:  schematicID,
+		},
+		"worker": {
+			CPUs:         workerCPU,
+			MemoryMB:     workerRAMGB * 1024,
+			DiskSizeGB:   workerDiskGB,
+			TalosVersion: talosVersion,
+			SchematicID:  schematicID,
+		},
+	}
+	if cpCount > 0 {
+		plan.Cluster.Layout = append(plan.Cluster.Layout, talosNodeLayoutSpec{
+			Type: "controlplane", Count: cpCount, Prefix: "cp",
+		})
+	}
+	if workerCount > 0 {
+		plan.Cluster.Layout = append(plan.Cluster.Layout, talosNodeLayoutSpec{
+			Type: "worker", Count: workerCount, Prefix: "wk",
+		})
+	}
+
+	data, err := yaml.Marshal(plan)
+	if err != nil {
+		return fmt.Errorf("marshal cluster plan: %w", err)
+	}
+	if err := sopsEncrypt(planPath, data); err != nil {
 		return err
 	}
+
+	fmt.Printf("\n\033[32m✓ Saved and encrypted:\033[0m %s\n", filepath.Base(planPath))
 	return nil
 }
 
@@ -99,9 +200,16 @@ func runTalosGenerate(planPath string, force bool) error {
 		planPath = talosClusterPlanDefaultPath
 	}
 	if _, err := os.Stat(planPath); err != nil {
-		return &userError{
-			msg:  fmt.Sprintf("plan config not found: %s", planPath),
-			hint: "Create configs/talos.cluster.sops.yaml (or pass --config).",
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			fmt.Printf("  \033[33mPlan config not found:\033[0m %s\n", planPath)
+			if err := createTalosPlanInteractive(planPath); err != nil {
+				return err
+			}
+		} else {
+			return &userError{
+				msg:  fmt.Sprintf("plan config not found: %s", planPath),
+				hint: "Create configs/talos.cluster.sops.yaml (or pass --config).",
+			}
 		}
 	}
 
