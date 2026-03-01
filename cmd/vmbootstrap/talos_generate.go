@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/netip"
@@ -8,7 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
@@ -105,11 +108,42 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	folderDefault := ""
 	poolDefault := ""
 	cidrDefault, startIPDefault, gatewayDefault, dnsDefault := suggestNodeNetworkDefaults()
+	var (
+		datastores []vcenter.DatastoreInfo
+		networks   []vcenter.NetworkInfo
+		folders    []vcenter.FolderInfo
+		pools      []vcenter.ResourcePoolInfo
+		catErr     error
+	)
 	if vcCfg, err := loadVCenterConfig(vcenterConfigFile); err == nil {
 		dsDefault = vcCfg.VCenter.ISODatastore
 		netDefault = vcCfg.VCenter.Network
 		folderDefault = vcCfg.VCenter.Folder
 		poolDefault = vcCfg.VCenter.ResourcePool
+
+		fmt.Print("  Connecting to vCenter... ")
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
+			Host:     vcCfg.VCenter.Host,
+			Username: vcCfg.VCenter.Username,
+			Password: vcCfg.VCenter.Password,
+			Port:     vcCfg.VCenter.Port,
+			Insecure: vcCfg.VCenter.Insecure,
+		})
+		if err != nil {
+			catErr = err
+			cancel()
+			fmt.Printf("\033[33m⚠ %v\033[0m (pickers unavailable)\n", err)
+		} else {
+			datastores, _ = vclient.ListDatastores(vcCfg.VCenter.Datacenter)
+			networks, _ = vclient.ListNetworks(vcCfg.VCenter.Datacenter)
+			folders, _ = vclient.ListFolders(vcCfg.VCenter.Datacenter)
+			pools, _ = vclient.ListResourcePools(vcCfg.VCenter.Datacenter)
+			_ = vclient.Disconnect()
+			cancel()
+			fmt.Printf("\033[32m✓\033[0m  (%d datastores, %d networks, %d folders, %d pools)\n",
+				len(datastores), len(networks), len(folders), len(pools))
+		}
 	}
 
 	clusterName := strings.TrimSpace(readLine("Cluster name", strOrDefault(plan.Cluster.Name, "dev")))
@@ -184,10 +218,36 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	workerDiskGB := readInt("Worker OS disk (GB)", intOrDefault(workerDefault.DiskSizeGB, 100), 10, 4096)
 
 	fmt.Println()
-	defaultDatastore := readLine("Default datastore", strOrDefault(plan.Cluster.Defaults.Datastore, dsDefault))
-	defaultNetwork := readLine("Default network", strOrDefault(plan.Cluster.Defaults.NetworkName, netDefault))
-	defaultFolder := readLine("Default folder", strOrDefault(plan.Cluster.Defaults.Folder, folderDefault))
-	defaultPool := readLine("Default resource pool", strOrDefault(plan.Cluster.Defaults.ResourcePool, poolDefault))
+	defaultDatastore := ""
+	defaultNetwork := ""
+	defaultFolder := ""
+	defaultPool := ""
+	if catErr != nil || len(datastores) == 0 {
+		defaultDatastore = readLine("Default datastore", strOrDefault(plan.Cluster.Defaults.Datastore, dsDefault))
+	} else {
+		fmt.Println("  Default datastore:")
+		defaultDatastore = selectISODatastore(datastores, strOrDefault(plan.Cluster.Defaults.Datastore, dsDefault))
+	}
+	if catErr != nil || len(networks) == 0 {
+		defaultNetwork = readLine("Default network", strOrDefault(plan.Cluster.Defaults.NetworkName, netDefault))
+	} else {
+		var netNames []string
+		for _, n := range networks {
+			parts := strings.Split(n.Name, "/")
+			netNames = append(netNames, parts[len(parts)-1])
+		}
+		defaultNetwork = interactiveSelect(netNames, strOrDefault(plan.Cluster.Defaults.NetworkName, netDefault), "Default network:")
+	}
+	if catErr != nil || len(folders) == 0 {
+		defaultFolder = readLine("Default folder", strOrDefault(plan.Cluster.Defaults.Folder, folderDefault))
+	} else {
+		defaultFolder = selectFolder(folders, strOrDefault(plan.Cluster.Defaults.Folder, folderDefault), "Default folder:")
+	}
+	if catErr != nil || len(pools) == 0 {
+		defaultPool = readLine("Default resource pool", strOrDefault(plan.Cluster.Defaults.ResourcePool, poolDefault))
+	} else {
+		defaultPool = selectResourcePool(pools, strOrDefault(plan.Cluster.Defaults.ResourcePool, poolDefault), "Default resource pool:")
+	}
 	timeoutMinutes := readInt("Node timeout (minutes)", intOrDefault(plan.Cluster.Defaults.TimeoutMins, 45), 1, 240)
 
 	plan.Cluster.Defaults.Datastore = defaultDatastore
