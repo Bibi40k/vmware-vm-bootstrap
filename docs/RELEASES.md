@@ -8,6 +8,14 @@ Highlights:
 Notes:
 - TBD
 
+## v0.2.2 (2026-03-01)
+
+Highlights:
+- Bumped `cli-wizard-core` dependency from `v0.1.1` to `v0.1.2`.
+
+Notes:
+- Pulls badge/docs patch release from shared wizard core.
+
 ## v0.2.1 (2026-03-01)
 
 Highlights:
