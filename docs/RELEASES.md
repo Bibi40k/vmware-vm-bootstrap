@@ -8,6 +8,18 @@ Highlights:
 Notes:
 - TBD
 
+## v0.2.0 (2026-03-01)
+
+Highlights:
+- Generalized VM bootstrap around OS profiles (Ubuntu and Talos) with a reusable provisioning architecture.
+- Added Talos-focused node lifecycle flows (`node-create`, `node-delete`, `node-recreate`) and Talos plan/config generation from interactive CLI.
+- Unified enterprise wizard UX across flows: resume drafts, safer defaults, consistent selectors, and standardized prompts.
+
+Notes:
+- `make config` now includes Talos schematic and node generation entrypoints aligned with the same menu system.
+- Talos release/extension catalogs and defaults are externalized in config files (`configs/talos-releases.yaml`, `configs/talos-extensions.yaml`).
+- Added release checklist documentation in `docs/RELEASE_CHECKLIST.md` for standardized publication flow.
+
 ## v0.1.13 (2026-02-26)
 
 Highlights:
