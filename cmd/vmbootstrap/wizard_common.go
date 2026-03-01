@@ -93,7 +93,19 @@ type VCenterCatalog struct {
 	Pools      []vcenter.ResourcePoolInfo
 }
 
-func fetchVCenterCatalog(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCenterCatalog, error) {
+type VCenterResources struct {
+	Datastores []vcenter.DatastoreInfo
+	Networks   []vcenter.NetworkInfo
+	Folders    []vcenter.FolderInfo
+	Pools      []vcenter.ResourcePoolInfo
+
+	DatastoresErr error
+	NetworksErr   error
+	FoldersErr    error
+	PoolsErr      error
+}
+
+func fetchVCenterResources(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCenterResources, error) {
 	if vcCfg == nil {
 		return nil, fmt.Errorf("vcenter config is nil")
 	}
@@ -112,16 +124,34 @@ func fetchVCenterCatalog(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCen
 	}
 	defer func() { _ = vclient.Disconnect() }()
 
-	ds, _ := vclient.ListDatastores(vcCfg.VCenter.Datacenter)
-	nets, _ := vclient.ListNetworks(vcCfg.VCenter.Datacenter)
-	fl, _ := vclient.ListFolders(vcCfg.VCenter.Datacenter)
-	pl, _ := vclient.ListResourcePools(vcCfg.VCenter.Datacenter)
+	ds, dsErr := vclient.ListDatastores(vcCfg.VCenter.Datacenter)
+	nets, netsErr := vclient.ListNetworks(vcCfg.VCenter.Datacenter)
+	fl, flErr := vclient.ListFolders(vcCfg.VCenter.Datacenter)
+	pl, plErr := vclient.ListResourcePools(vcCfg.VCenter.Datacenter)
+
+	return &VCenterResources{
+		Datastores:    ds,
+		Networks:      nets,
+		Folders:       fl,
+		Pools:         pl,
+		DatastoresErr: dsErr,
+		NetworksErr:   netsErr,
+		FoldersErr:    flErr,
+		PoolsErr:      plErr,
+	}, nil
+}
+
+func fetchVCenterCatalog(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCenterCatalog, error) {
+	rs, err := fetchVCenterResources(vcCfg, timeout)
+	if err != nil {
+		return nil, err
+	}
 
 	return &VCenterCatalog{
-		Datastores: ds,
-		Networks:   nets,
-		Folders:    fl,
-		Pools:      pl,
+		Datastores: rs.Datastores,
+		Networks:   rs.Networks,
+		Folders:    rs.Folders,
+		Pools:      rs.Pools,
 	}, nil
 }
 

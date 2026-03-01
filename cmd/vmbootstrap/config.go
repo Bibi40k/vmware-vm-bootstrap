@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -241,35 +240,18 @@ func editVMConfig(path string) error {
 	fmt.Print("  Connecting to vCenter... ")
 	vcCfg, vcfgErr := loadVCenterConfig(vcenterConfigFile)
 
-	var datastores []vcenter.DatastoreInfo
-	var networks []vcenter.NetworkInfo
-	var folders []vcenter.FolderInfo
-	var pools []vcenter.ResourcePoolInfo
-	var dsErr, netErr, folderErr, poolErr error
+	var resources *VCenterResources
 
 	if vcfgErr != nil {
 		fmt.Printf("\033[33m⚠ %v\033[0m (pickers unavailable)\n", vcfgErr)
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		vclient, vcErr := vcenter.NewClient(ctx, &vcenter.Config{
-			Host:     vcCfg.VCenter.Host,
-			Username: vcCfg.VCenter.Username,
-			Password: vcCfg.VCenter.Password,
-			Port:     vcCfg.VCenter.Port,
-			Insecure: vcCfg.VCenter.Insecure,
-		})
+		var vcErr error
+		resources, vcErr = fetchVCenterResources(vcCfg, 60*time.Second)
 		if vcErr != nil {
-			cancel()
 			fmt.Printf("\033[33m⚠ %v\033[0m (pickers unavailable)\n", vcErr)
 		} else {
-			datastores, dsErr = vclient.ListDatastores(vcCfg.VCenter.Datacenter)
-			networks, netErr = vclient.ListNetworks(vcCfg.VCenter.Datacenter)
-			folders, folderErr = vclient.ListFolders(vcCfg.VCenter.Datacenter)
-			pools, poolErr = vclient.ListResourcePools(vcCfg.VCenter.Datacenter)
-			_ = vclient.Disconnect()
-			cancel()
 			fmt.Printf("\033[32m✓\033[0m  (%d datastores, %d networks, %d folders, %d pools)\n",
-				len(datastores), len(networks), len(folders), len(pools))
+				len(resources.Datastores), len(resources.Networks), len(resources.Folders), len(resources.Pools))
 		}
 	}
 	fmt.Println()
@@ -323,32 +305,32 @@ func editVMConfig(path string) error {
 
 	// === [3] Placement & Storage ===
 	fmt.Println("[3/5] Placement & Storage")
-	if folderErr != nil || vcfgErr != nil {
+	if resources == nil || resources.FoldersErr != nil {
 		v.Folder = readLine("VM folder", v.Folder)
 	} else {
-		v.Folder = selectFolder(folders, v.Folder, "VM folder:")
+		v.Folder = selectFolder(resources.Folders, v.Folder, "VM folder:")
 	}
-	if poolErr != nil || vcfgErr != nil {
+	if resources == nil || resources.PoolsErr != nil {
 		v.ResourcePool = readLine("Resource pool", v.ResourcePool)
 	} else {
-		v.ResourcePool = selectResourcePool(pools, v.ResourcePool, "Resource pool:")
+		v.ResourcePool = selectResourcePool(resources.Pools, v.ResourcePool, "Resource pool:")
 	}
 	fmt.Println()
 
 	requiredGB := float64(v.DiskSizeGB + v.DataDiskSizeGB)
-	if dsErr != nil || vcfgErr != nil {
+	if resources == nil || resources.DatastoresErr != nil {
 		v.Datastore = readLine("Datastore", v.Datastore)
 	} else {
-		v.Datastore = selectDatastore(datastores, requiredGB, v.Datastore)
+		v.Datastore = selectDatastore(resources.Datastores, requiredGB, v.Datastore)
 	}
 	fmt.Println()
 
 	// === [4] Network ===
 	fmt.Println("[4/5] Network")
-	if netErr != nil || vcfgErr != nil || len(networks) == 0 {
+	if resources == nil || resources.NetworksErr != nil || len(resources.Networks) == 0 {
 		v.NetworkName = readLine("Network name", v.NetworkName)
 	} else {
-		v.NetworkName = interactiveSelect(vcenterNetworkLeafNames(networks), v.NetworkName, "Network:")
+		v.NetworkName = interactiveSelect(vcenterNetworkLeafNames(resources.Networks), v.NetworkName, "Network:")
 	}
 	v.NetworkInterface = readLine("Guest NIC name", strOrDefault(v.NetworkInterface, configs.Defaults.Network.Interface))
 	v.IPAddress = readIPLine("IP address", v.IPAddress)
@@ -591,27 +573,12 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		return fmt.Errorf("failed to load vCenter config: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
-		Host:     vcCfg.VCenter.Host,
-		Username: vcCfg.VCenter.Username,
-		Password: vcCfg.VCenter.Password,
-		Port:     vcCfg.VCenter.Port,
-		Insecure: vcCfg.VCenter.Insecure,
-	})
+	resources, err := fetchVCenterResources(vcCfg, 60*time.Second)
 	if err != nil {
-		cancel()
 		return fmt.Errorf("vCenter connection failed: %w", err)
 	}
-
-	// Fetch datastores, networks, and folders while context is still fresh.
-	datastores, dsErr := vclient.ListDatastores(vcCfg.VCenter.Datacenter)
-	networks, netErr := vclient.ListNetworks(vcCfg.VCenter.Datacenter)
-	folders, folderErr := vclient.ListFolders(vcCfg.VCenter.Datacenter)
-	pools, poolErr := vclient.ListResourcePools(vcCfg.VCenter.Datacenter)
-	_ = vclient.Disconnect()
-	cancel()
-	fmt.Println("\033[32m✓\033[0m")
+	fmt.Printf("\033[32m✓\033[0m  (%d datastores, %d networks, %d folders, %d pools)\n",
+		len(resources.Datastores), len(resources.Networks), len(resources.Folders), len(resources.Pools))
 	fmt.Println()
 
 	// === [2] VM Specs ===
@@ -648,36 +615,36 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 
 	// === [3] Placement & Storage ===
 	fmt.Println("[3/5] Placement & Storage")
-	if folderErr != nil {
+	if resources.FoldersErr != nil {
 		out.VM.Folder = readLine("VM folder", strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder))
 	} else {
-		out.VM.Folder = selectFolder(folders, strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder), "VM folder:")
+		out.VM.Folder = selectFolder(resources.Folders, strOrDefault(out.VM.Folder, vcCfg.VCenter.Folder), "VM folder:")
 	}
-	if poolErr != nil {
+	if resources.PoolsErr != nil {
 		out.VM.ResourcePool = readLine("Resource pool", strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool))
 	} else {
-		out.VM.ResourcePool = selectResourcePool(pools, strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool), "Resource pool:")
+		out.VM.ResourcePool = selectResourcePool(resources.Pools, strOrDefault(out.VM.ResourcePool, vcCfg.VCenter.ResourcePool), "Resource pool:")
 	}
 	fmt.Println()
 
 	requiredGB := float64(out.VM.DiskSizeGB + out.VM.DataDiskSizeGB)
-	if dsErr != nil {
-		fmt.Printf("  ⚠ Could not list datastores: %v\n", dsErr)
+	if resources.DatastoresErr != nil {
+		fmt.Printf("  ⚠ Could not list datastores: %v\n", resources.DatastoresErr)
 		out.VM.Datastore = readLine("Datastore", out.VM.Datastore)
 	} else {
-		out.VM.Datastore = selectDatastore(datastores, requiredGB, out.VM.Datastore)
+		out.VM.Datastore = selectDatastore(resources.Datastores, requiredGB, out.VM.Datastore)
 	}
 	fmt.Println()
 
 	// === [4] Network (cached from upfront fetch) ===
 	fmt.Println("[4/5] Network")
-	if netErr != nil || len(networks) == 0 {
-		if netErr != nil {
-			fmt.Printf("  ⚠ Could not list networks: %v\n", netErr)
+	if resources.NetworksErr != nil || len(resources.Networks) == 0 {
+		if resources.NetworksErr != nil {
+			fmt.Printf("  ⚠ Could not list networks: %v\n", resources.NetworksErr)
 		}
 		out.VM.NetworkName = readLine("Network name", strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network))
 	} else {
-		out.VM.NetworkName = interactiveSelect(vcenterNetworkLeafNames(networks), strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
+		out.VM.NetworkName = interactiveSelect(vcenterNetworkLeafNames(resources.Networks), strOrDefault(out.VM.NetworkName, vcCfg.VCenter.Network), "Network:")
 	}
 
 	out.VM.NetworkInterface = readLine("Guest NIC name", strOrDefault(out.VM.NetworkInterface, configs.Defaults.Network.Interface))
