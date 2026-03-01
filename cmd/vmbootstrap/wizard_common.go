@@ -126,37 +126,66 @@ func fetchVCenterCatalog(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCen
 }
 
 func pickDatastoreFromCatalog(cat *VCenterCatalog, current string) string {
-	if cat == nil || len(cat.Datastores) == 0 {
-		return readLine("Default datastore", current)
-	}
-	fmt.Println("  Default datastore:")
-	return selectISODatastore(cat.Datastores, current)
+	return pickDatastoreFromCatalogWithPrompt(cat, current, "Default datastore", "Default datastore:")
 }
 
 func pickNetworkFromCatalog(cat *VCenterCatalog, current string) string {
-	if cat == nil || len(cat.Networks) == 0 {
-		return readLine("Default network", current)
-	}
-	var netNames []string
-	for _, n := range cat.Networks {
-		parts := strings.Split(n.Name, "/")
-		netNames = append(netNames, parts[len(parts)-1])
-	}
-	return interactiveSelect(netNames, current, "Default network:")
+	return pickNetworkFromCatalogWithPrompt(cat, current, "Default network", "Default network:")
 }
 
 func pickFolderFromCatalog(cat *VCenterCatalog, current string) string {
-	if cat == nil || len(cat.Folders) == 0 {
-		return readLine("Default folder", current)
-	}
-	return selectFolder(cat.Folders, current, "Default folder:")
+	return pickFolderFromCatalogWithPrompt(cat, current, "Default folder", "Default folder:")
 }
 
 func pickResourcePoolFromCatalog(cat *VCenterCatalog, current string) string {
-	if cat == nil || len(cat.Pools) == 0 {
-		return readLine("Default resource pool", current)
+	return pickResourcePoolFromCatalogWithPrompt(cat, current, "Default resource pool", "Default resource pool:")
+}
+
+func pickDatastoreFromCatalogWithPrompt(cat *VCenterCatalog, current, manualPrompt, listHeader string) string {
+	if cat == nil || len(cat.Datastores) == 0 {
+		return readLine(manualPrompt, current)
 	}
-	return selectResourcePool(cat.Pools, current, "Default resource pool:")
+	if strings.TrimSpace(listHeader) != "" {
+		fmt.Printf("  %s\n", listHeader)
+	}
+	return selectISODatastore(cat.Datastores, current)
+}
+
+func pickNetworkFromCatalogWithPrompt(cat *VCenterCatalog, current, manualPrompt, listLabel string) string {
+	if cat == nil || len(cat.Networks) == 0 {
+		return readLine(manualPrompt, current)
+	}
+	return interactiveSelect(vcenterNetworkLeafNames(cat.Networks), current, listLabel)
+}
+
+func pickFolderFromCatalogWithPrompt(cat *VCenterCatalog, current, manualPrompt, listLabel string) string {
+	if cat == nil || len(cat.Folders) == 0 {
+		return readLine(manualPrompt, current)
+	}
+	return selectFolder(cat.Folders, current, listLabel)
+}
+
+func pickResourcePoolFromCatalogWithPrompt(cat *VCenterCatalog, current, manualPrompt, listLabel string) string {
+	if cat == nil || len(cat.Pools) == 0 {
+		return readLine(manualPrompt, current)
+	}
+	return selectResourcePool(cat.Pools, current, listLabel)
+}
+
+func vcenterNetworkLeafNames(networks []vcenter.NetworkInfo) []string {
+	out := make([]string, 0, len(networks))
+	for _, n := range networks {
+		parts := strings.Split(n.Name, "/")
+		out = append(out, parts[len(parts)-1])
+	}
+	return out
+}
+
+func catalogIfReady(cat *VCenterCatalog, err error) *VCenterCatalog {
+	if err != nil {
+		return nil
+	}
+	return cat
 }
 
 // loadDraftYAML loads draft YAML into out if draftPath exists.

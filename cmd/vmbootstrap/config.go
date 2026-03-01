@@ -110,39 +110,12 @@ func editVCenterConfig(path string) error {
 
 	// Connect to vCenter upfront to fetch datastores + folders for pickers.
 	fmt.Print("  Connecting to vCenter... ")
-	type vcCatalog struct {
-		datastores []vcenter.DatastoreInfo
-		networks   []vcenter.NetworkInfo
-		folders    []vcenter.FolderInfo
-		pools      []vcenter.ResourcePoolInfo
-	}
-	cat, catErr := func() (*vcCatalog, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
-			Host:     cfg.VCenter.Host,
-			Username: cfg.VCenter.Username,
-			Password: cfg.VCenter.Password,
-			Port:     cfg.VCenter.Port,
-			Insecure: cfg.VCenter.Insecure,
-		})
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			_ = vclient.Disconnect()
-		}()
-		ds, _ := vclient.ListDatastores(cfg.VCenter.Datacenter)
-		nets, _ := vclient.ListNetworks(cfg.VCenter.Datacenter)
-		fl, _ := vclient.ListFolders(cfg.VCenter.Datacenter)
-		pl, _ := vclient.ListResourcePools(cfg.VCenter.Datacenter)
-		return &vcCatalog{datastores: ds, networks: nets, folders: fl, pools: pl}, nil
-	}()
+	cat, catErr := fetchVCenterCatalog(&cfg, 30*time.Second)
 	if catErr != nil {
 		fmt.Printf("\033[33m⚠ %v\033[0m (will use manual input)\n", catErr)
 	} else {
 		fmt.Printf("\033[32m✓\033[0m  (%d datastores, %d networks, %d folders, %d pools)\n",
-			len(cat.datastores), len(cat.networks), len(cat.folders), len(cat.pools))
+			len(cat.Datastores), len(cat.Networks), len(cat.Folders), len(cat.Pools))
 	}
 	fmt.Println()
 
@@ -154,27 +127,11 @@ func editVCenterConfig(path string) error {
 	}
 	v.Datacenter = readLine("Datacenter", v.Datacenter)
 
-	if catErr != nil {
-		v.ISODatastore = readLine("ISO datastore (where Ubuntu + seed ISOs are stored)", v.ISODatastore)
-		v.Folder = readLine("Default VM folder", v.Folder)
-		v.ResourcePool = readLine("Default resource pool", v.ResourcePool)
-		v.Network = readLine("Default network", v.Network)
-	} else {
-		fmt.Println("  ISO datastore (where Ubuntu + seed ISOs are stored):")
-		v.ISODatastore = selectISODatastore(cat.datastores, v.ISODatastore)
-		v.Folder = selectFolder(cat.folders, v.Folder, "Default VM folder:")
-		v.ResourcePool = selectResourcePool(cat.pools, v.ResourcePool, "Default resource pool:")
-		if len(cat.networks) > 0 {
-			var netNames []string
-			for _, n := range cat.networks {
-				parts := strings.Split(n.Name, "/")
-				netNames = append(netNames, parts[len(parts)-1])
-			}
-			v.Network = interactiveSelect(netNames, v.Network, "Default network:")
-		} else {
-			v.Network = readLine("Default network", v.Network)
-		}
-	}
+	readyCat := catalogIfReady(cat, catErr)
+	v.ISODatastore = pickDatastoreFromCatalogWithPrompt(readyCat, v.ISODatastore, "ISO datastore (where Ubuntu + seed ISOs are stored)", "ISO datastore (where Ubuntu + seed ISOs are stored):")
+	v.Folder = pickFolderFromCatalogWithPrompt(readyCat, v.Folder, "Default VM folder", "Default VM folder:")
+	v.ResourcePool = pickResourcePoolFromCatalogWithPrompt(readyCat, v.ResourcePool, "Default resource pool", "Default resource pool:")
+	v.Network = pickNetworkFromCatalogWithPrompt(readyCat, v.Network, "Default network", "Default network:")
 
 	fmt.Println()
 	if !readYesNo("Save and re-encrypt?", true) {
@@ -235,63 +192,20 @@ func createVCenterConfigWithSeed(path string, seed vcenterFileConfig, draftPath 
 
 	// Try to connect and fetch resource pickers.
 	fmt.Print("  Connecting to vCenter... ")
-	type vcCatalog struct {
-		datastores []vcenter.DatastoreInfo
-		networks   []vcenter.NetworkInfo
-		folders    []vcenter.FolderInfo
-		pools      []vcenter.ResourcePoolInfo
-	}
-	cat, catErr := func() (*vcCatalog, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
-			Host:     v.Host,
-			Username: v.Username,
-			Password: v.Password,
-			Port:     v.Port,
-			Insecure: v.Insecure,
-		})
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			_ = vclient.Disconnect()
-		}()
-		ds, _ := vclient.ListDatastores(v.Datacenter)
-		nets, _ := vclient.ListNetworks(v.Datacenter)
-		fl, _ := vclient.ListFolders(v.Datacenter)
-		pl, _ := vclient.ListResourcePools(v.Datacenter)
-		return &vcCatalog{datastores: ds, networks: nets, folders: fl, pools: pl}, nil
-	}()
+	cat, catErr := fetchVCenterCatalog(&cfg, 30*time.Second)
 	if catErr != nil {
 		fmt.Printf("\033[33m⚠ %v\033[0m (will use manual input)\n", catErr)
 	} else {
 		fmt.Printf("\033[32m✓\033[0m  (%d datastores, %d networks, %d folders, %d pools)\n",
-			len(cat.datastores), len(cat.networks), len(cat.folders), len(cat.pools))
+			len(cat.Datastores), len(cat.Networks), len(cat.Folders), len(cat.Pools))
 	}
 	fmt.Println()
 
-	if catErr != nil {
-		v.ISODatastore = readLine("ISO datastore (where Ubuntu + seed ISOs are stored)", v.ISODatastore)
-		v.Folder = readLine("Default VM folder", v.Folder)
-		v.ResourcePool = readLine("Default resource pool", v.ResourcePool)
-		v.Network = readLine("Default network", v.Network)
-	} else {
-		fmt.Println("  ISO datastore (where Ubuntu + seed ISOs are stored):")
-		v.ISODatastore = selectISODatastore(cat.datastores, v.ISODatastore)
-		v.Folder = selectFolder(cat.folders, v.Folder, "Default VM folder:")
-		v.ResourcePool = selectResourcePool(cat.pools, v.ResourcePool, "Default resource pool:")
-		if len(cat.networks) > 0 {
-			var netNames []string
-			for _, n := range cat.networks {
-				parts := strings.Split(n.Name, "/")
-				netNames = append(netNames, parts[len(parts)-1])
-			}
-			v.Network = interactiveSelect(netNames, v.Network, "Default network:")
-		} else {
-			v.Network = readLine("Default network", v.Network)
-		}
-	}
+	readyCat := catalogIfReady(cat, catErr)
+	v.ISODatastore = pickDatastoreFromCatalogWithPrompt(readyCat, v.ISODatastore, "ISO datastore (where Ubuntu + seed ISOs are stored)", "ISO datastore (where Ubuntu + seed ISOs are stored):")
+	v.Folder = pickFolderFromCatalogWithPrompt(readyCat, v.Folder, "Default VM folder", "Default VM folder:")
+	v.ResourcePool = pickResourcePoolFromCatalogWithPrompt(readyCat, v.ResourcePool, "Default resource pool", "Default resource pool:")
+	v.Network = pickNetworkFromCatalogWithPrompt(readyCat, v.Network, "Default network", "Default network:")
 
 	fmt.Println()
 	if !readYesNo("Save and encrypt?", true) {

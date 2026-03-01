@@ -544,10 +544,3 @@ func suggestNodeNetworkDefaults() (cidr string, startIP string, gateway string, 
 	}
 	return chosen.key + ".0/24", fmt.Sprintf("%s.%d", chosen.key, next), chosen.key + ".1", chosen.key + ".1"
 }
-
-func catalogIfReady(cat *VCenterCatalog, err error) *VCenterCatalog {
-	if err != nil {
-		return nil
-	}
-	return cat
-}
