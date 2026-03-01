@@ -132,6 +132,16 @@ func runTalosConfigWizardWithDraft(draftPath string) error {
 					cancelled = true
 					return nil
 				}
+				if existingName, exists := findSchematicName(cfg.Talos.Schematics, name); exists {
+					if !readYesNo(
+						fmt.Sprintf("Schematic '%s' already exists. Overwrite it?", existingName),
+						false,
+					) {
+						fmt.Println("  Cancelled.")
+						cancelled = true
+						return nil
+					}
+				}
 				factoryURL = strings.TrimSpace(readLine("Image Factory URL", cfg.Talos.FactoryURL))
 				if wasPromptInterrupted() {
 					fmt.Println("  Cancelled.")
@@ -215,6 +225,20 @@ func runTalosConfigWizardWithDraft(draftPath string) error {
 	_ = session.Finalize()
 	fmt.Printf("\n\033[32m✓ Saved and encrypted: %s\033[0m\n", filepath.Base(talosSchematicsConfigFile))
 	return nil
+}
+
+func findSchematicName(entries []talosSchematicEntry, input string) (string, bool) {
+	needle := strings.ToLower(strings.TrimSpace(input))
+	if needle == "" {
+		return "", false
+	}
+	for _, entry := range entries {
+		name := strings.TrimSpace(entry.Name)
+		if strings.ToLower(name) == needle {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 func selectTalosSchematicID(current string) string {
