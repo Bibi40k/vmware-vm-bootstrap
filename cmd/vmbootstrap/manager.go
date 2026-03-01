@@ -159,9 +159,9 @@ func listDrafts(all bool) []draftInfo {
 			kind = "vm"
 		} else if targetBase == "vcenter.sops.yaml" {
 			kind = "vcenter"
-		} else if targetBase == "talos.schematics.sops.yaml" {
+		} else if strings.HasPrefix(targetBase, "talos.schematics") && strings.HasSuffix(targetBase, ".sops.yaml") {
 			kind = "talos_schematics"
-		} else if targetBase == "talos.cluster.sops.yaml" {
+		} else if strings.HasPrefix(targetBase, "talos.cluster") && strings.HasSuffix(targetBase, ".sops.yaml") {
 			kind = "talos_cluster"
 		}
 		fi, _ := os.Stat(p)
