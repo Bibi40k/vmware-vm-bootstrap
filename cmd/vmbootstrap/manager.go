@@ -195,15 +195,7 @@ func listDrafts(all bool) []draftInfo {
 }
 
 func detectDraftKind(draftPath, targetBase string) string {
-	// Fast-path by conventional names.
-	if strings.HasPrefix(targetBase, "vm.") {
-		return "vm"
-	}
-	if targetBase == "vcenter.sops.yaml" {
-		return "vcenter"
-	}
-
-	// Content-based detection: no filename constraints.
+	// Content-based detection only: no filename constraints.
 	var data map[string]any
 	raw, err := os.ReadFile(draftPath)
 	if err == nil {
