@@ -5,7 +5,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"golang.org/x/term"
@@ -86,26 +85,15 @@ func createTalosPlanInteractive(planPath, draftPath string) error {
 	fmt.Println()
 
 	var plan talosClusterPlanFile
-	if draftPath != "" {
-		if data, err := os.ReadFile(draftPath); err == nil {
-			if err := yaml.Unmarshal(data, &plan); err == nil {
-				fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
-			}
-		}
+	if loaded, err := loadDraftYAML(draftPath, &plan); err == nil && loaded {
+		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
 	}
 
-	stopDraftHandler := startDraftInterruptHandler(planPath, draftPath, func() ([]byte, bool) {
-		data, err := yaml.Marshal(plan)
-		if err != nil {
-			return nil, false
-		}
-		if strings.TrimSpace(plan.Cluster.Name) == "" &&
+	stopDraftHandler := startYAMLDraftHandler(planPath, draftPath, &plan, func() bool {
+		return strings.TrimSpace(plan.Cluster.Name) == "" &&
 			strings.TrimSpace(plan.Cluster.Network.CIDR) == "" &&
 			len(plan.Cluster.NodeTypes) == 0 &&
-			len(plan.Cluster.Layout) == 0 {
-			return nil, false
-		}
-		return data, true
+			len(plan.Cluster.Layout) == 0
 	})
 	defer stopDraftHandler()
 
@@ -474,30 +462,4 @@ func ipv4MaskFromPrefix(bits int) string {
 		byte(mask>>8),
 		byte(mask),
 	)
-}
-
-func latestDraftForTarget(targetPath string) string {
-	base := filepath.Base(targetPath)
-	pattern := filepath.Join("tmp", fmt.Sprintf("%s.draft.*.yaml", base))
-	matches, _ := filepath.Glob(pattern)
-	if len(matches) == 0 {
-		return ""
-	}
-	type fileInfo struct {
-		path string
-		mod  int64
-	}
-	var infos []fileInfo
-	for _, p := range matches {
-		st, err := os.Stat(p)
-		if err != nil {
-			continue
-		}
-		infos = append(infos, fileInfo{path: p, mod: st.ModTime().UnixNano()})
-	}
-	if len(infos) == 0 {
-		return ""
-	}
-	sort.Slice(infos, func(i, j int) bool { return infos[i].mod > infos[j].mod })
-	return infos[0].path
 }

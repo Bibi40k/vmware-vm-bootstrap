@@ -612,15 +612,6 @@ func runCreateWizard() error {
 }
 
 func runCreateWizardWithDraft(outputFile, draftPath string) error {
-	data, err := os.ReadFile(draftPath)
-	if err != nil {
-		return err
-	}
-	var out VMWizardOutput
-	if err := yaml.Unmarshal(data, &out); err != nil {
-		return fmt.Errorf("parse draft: %w", err)
-	}
-	fmt.Printf("\n\033[33m⚠ Resuming draft: %s\033[0m\n", filepath.Base(draftPath))
 	return runCreateWizardWithSeed(outputFile, draftPath)
 }
 
@@ -636,11 +627,8 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 	fmt.Println()
 
 	var out VMWizardOutput
-	if draftPath != "" {
-		data, err := os.ReadFile(draftPath)
-		if err == nil {
-			_ = yaml.Unmarshal(data, &out)
-		}
+	if loaded, err := loadDraftYAML(draftPath, &out); err == nil && loaded {
+		fmt.Printf("\033[33m⚠ Resuming draft: %s\033[0m\n\n", filepath.Base(draftPath))
 	}
 
 	// OS selector must be the first wizard question for new VM configs.
@@ -689,13 +677,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 		}
 	}
 
-	stopDraftHandler := startDraftInterruptHandler(outputFile, draftPath, func() ([]byte, bool) {
-		data, err := yaml.Marshal(out)
-		if err != nil {
-			return nil, false
-		}
-		return data, true
-	})
+	stopDraftHandler := startYAMLDraftHandler(outputFile, draftPath, &out, nil)
 	defer stopDraftHandler()
 
 	// Connect to vCenter and fetch all resources upfront (before wizard questions).
