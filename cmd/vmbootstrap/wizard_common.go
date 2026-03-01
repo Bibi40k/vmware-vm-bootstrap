@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/Bibi40k/vmware-vm-bootstrap/pkg/vcenter"
 	"gopkg.in/yaml.v3"
 )
 
@@ -80,6 +83,80 @@ func runWizardSteps(steps []WizardStep) error {
 		}
 	}
 	return nil
+}
+
+// VCenterCatalog is a reusable snapshot of vCenter pick-list resources.
+type VCenterCatalog struct {
+	Datastores []vcenter.DatastoreInfo
+	Networks   []vcenter.NetworkInfo
+	Folders    []vcenter.FolderInfo
+	Pools      []vcenter.ResourcePoolInfo
+}
+
+func fetchVCenterCatalog(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCenterCatalog, error) {
+	if vcCfg == nil {
+		return nil, fmt.Errorf("vcenter config is nil")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	vclient, err := vcenter.NewClient(ctx, &vcenter.Config{
+		Host:     vcCfg.VCenter.Host,
+		Username: vcCfg.VCenter.Username,
+		Password: vcCfg.VCenter.Password,
+		Port:     vcCfg.VCenter.Port,
+		Insecure: vcCfg.VCenter.Insecure,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = vclient.Disconnect() }()
+
+	ds, _ := vclient.ListDatastores(vcCfg.VCenter.Datacenter)
+	nets, _ := vclient.ListNetworks(vcCfg.VCenter.Datacenter)
+	fl, _ := vclient.ListFolders(vcCfg.VCenter.Datacenter)
+	pl, _ := vclient.ListResourcePools(vcCfg.VCenter.Datacenter)
+
+	return &VCenterCatalog{
+		Datastores: ds,
+		Networks:   nets,
+		Folders:    fl,
+		Pools:      pl,
+	}, nil
+}
+
+func pickDatastoreFromCatalog(cat *VCenterCatalog, current string) string {
+	if cat == nil || len(cat.Datastores) == 0 {
+		return readLine("Default datastore", current)
+	}
+	fmt.Println("  Default datastore:")
+	return selectISODatastore(cat.Datastores, current)
+}
+
+func pickNetworkFromCatalog(cat *VCenterCatalog, current string) string {
+	if cat == nil || len(cat.Networks) == 0 {
+		return readLine("Default network", current)
+	}
+	var netNames []string
+	for _, n := range cat.Networks {
+		parts := strings.Split(n.Name, "/")
+		netNames = append(netNames, parts[len(parts)-1])
+	}
+	return interactiveSelect(netNames, current, "Default network:")
+}
+
+func pickFolderFromCatalog(cat *VCenterCatalog, current string) string {
+	if cat == nil || len(cat.Folders) == 0 {
+		return readLine("Default folder", current)
+	}
+	return selectFolder(cat.Folders, current, "Default folder:")
+}
+
+func pickResourcePoolFromCatalog(cat *VCenterCatalog, current string) string {
+	if cat == nil || len(cat.Pools) == 0 {
+		return readLine("Default resource pool", current)
+	}
+	return selectResourcePool(cat.Pools, current, "Default resource pool:")
 }
 
 // loadDraftYAML loads draft YAML into out if draftPath exists.
