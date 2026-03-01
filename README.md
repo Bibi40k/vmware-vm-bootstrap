@@ -123,7 +123,7 @@ Security note:
 
 ## Bootstrap Result (for downstream automation)
 
-If you want to feed the bootstrap output into another tool (e.g., `github.com/Bibi40k/talos-vm-bootstrap`), you can save a normalized result file:
+If you want to feed the bootstrap output into another tool (e.g., `github.com/Bibi40k/talos-docker-bootstrap`), you can save a normalized result file:
 
 ```bash
 vmbootstrap run --bootstrap-result tmp/bootstrap-result.yaml
