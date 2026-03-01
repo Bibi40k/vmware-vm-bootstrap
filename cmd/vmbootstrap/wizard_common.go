@@ -115,22 +115,6 @@ func fetchVCenterCatalog(vcCfg *vcenterFileConfig, timeout time.Duration) (*VCen
 	}, nil
 }
 
-func pickDatastoreFromCatalog(cat *VCenterCatalog, current string) string {
-	return pickDatastoreFromCatalogWithPrompt(cat, current, "Default datastore", "Default datastore:")
-}
-
-func pickNetworkFromCatalog(cat *VCenterCatalog, current string) string {
-	return pickNetworkFromCatalogWithPrompt(cat, current, "Default network", "Default network:")
-}
-
-func pickFolderFromCatalog(cat *VCenterCatalog, current string) string {
-	return pickFolderFromCatalogWithPrompt(cat, current, "Default folder", "Default folder:")
-}
-
-func pickResourcePoolFromCatalog(cat *VCenterCatalog, current string) string {
-	return pickResourcePoolFromCatalogWithPrompt(cat, current, "Default resource pool", "Default resource pool:")
-}
-
 func pickDatastoreFromCatalogWithPrompt(cat *VCenterCatalog, current, manualPrompt, listHeader string) string {
 	if cat == nil || len(cat.Datastores) == 0 {
 		return readLine(manualPrompt, current)
