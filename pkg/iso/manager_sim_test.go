@@ -160,6 +160,22 @@ func TestRemoveAllCDROMs(t *testing.T) {
 	require.Empty(t, getCDROMs(devices))
 }
 
+func TestMountSingleISO_PublicWrapper(t *testing.T) {
+	env, cleanup := newSimEnv(t)
+	defer cleanup()
+
+	_, vmObj, datastore := createTestVM(t, env, "iso-single-public")
+	manager := NewManager(env.ctx)
+
+	isoPath := "[" + datastore.Name() + "] ISO/public-wrapper.iso"
+	require.NoError(t, manager.MountSingleISO(vmObj, isoPath, "Ubuntu"))
+
+	devices, err := getDevices(env.ctx, vmObj)
+	require.NoError(t, err)
+	cdroms := getCDROMs(devices)
+	require.NotEmpty(t, cdroms)
+}
+
 func TestConnectAllCDROMs_NoCdroms(t *testing.T) {
 	env, cleanup := newSimEnv(t)
 	defer cleanup()

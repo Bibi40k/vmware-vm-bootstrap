@@ -130,3 +130,60 @@ func TestTalosExtensionsLoaded(t *testing.T) {
 		t.Fatal("talos-extensions.yaml loaded no extensions")
 	}
 }
+
+func TestApplyBuiltinFallbacks_NilConfig(t *testing.T) {
+	applyBuiltinFallbacks(nil)
+}
+
+func TestApplyBuiltinFallbacks_FillsMissingValues(t *testing.T) {
+	cfg := &LibDefaults{}
+	applyBuiltinFallbacks(cfg)
+
+	if cfg.Talos.DefaultVersion == "" || cfg.Talos.DefaultCluster == "" || cfg.Talos.DefaultTimeoutM <= 0 {
+		t.Fatalf("expected talos defaults, got %+v", cfg.Talos)
+	}
+	if cfg.Talos.PlanNetwork.CIDR == "" || cfg.Talos.PlanNetwork.StartIP == "" || cfg.Talos.PlanNetwork.Gateway == "" || cfg.Talos.PlanNetwork.DNS == "" {
+		t.Fatalf("expected plan network defaults, got %+v", cfg.Talos.PlanNetwork)
+	}
+	if cfg.Talos.PlanNodeTypes.Controlplane.CPUs <= 0 || cfg.Talos.PlanNodeTypes.Worker.CPUs <= 0 {
+		t.Fatalf("expected plan node type defaults, got %+v", cfg.Talos.PlanNodeTypes)
+	}
+	if cfg.Talos.PlanLayout.ControlplaneCount <= 0 || cfg.Talos.PlanLayout.WorkerCount < 0 {
+		t.Fatalf("expected plan layout defaults, got %+v", cfg.Talos.PlanLayout)
+	}
+}
+
+func TestApplyBuiltinFallbacks_PreservesExplicitValues(t *testing.T) {
+	cfg := &LibDefaults{
+		Talos: TalosDefaults{
+			DefaultVersion:  "v9.9.9",
+			DefaultCluster:  "prod",
+			DefaultTimeoutM: 99,
+			PlanNetwork: TalosPlanNetwork{
+				CIDR:    "10.0.0.0/24",
+				StartIP: "10.0.0.10",
+				Gateway: "10.0.0.1",
+				DNS:     "1.1.1.1",
+			},
+			PlanNodeTypes: TalosPlanNodeTypes{
+				Controlplane: TalosPlanNodeTypeDefaults{CPUs: 2, MemoryGB: 4, DiskSizeG: 50},
+				Worker:       TalosPlanNodeTypeDefaults{CPUs: 3, MemoryGB: 6, DiskSizeG: 70},
+			},
+			PlanLayout: TalosPlanLayout{
+				ControlplaneCount: 5,
+				WorkerCount:       8,
+			},
+		},
+	}
+	applyBuiltinFallbacks(cfg)
+
+	if cfg.Talos.DefaultVersion != "v9.9.9" || cfg.Talos.DefaultCluster != "prod" || cfg.Talos.DefaultTimeoutM != 99 {
+		t.Fatalf("fallbacks overwrote explicit talos defaults: %+v", cfg.Talos)
+	}
+	if cfg.Talos.PlanLayout.ControlplaneCount != 5 || cfg.Talos.PlanLayout.WorkerCount != 8 {
+		t.Fatalf("fallbacks overwrote explicit plan layout: %+v", cfg.Talos.PlanLayout)
+	}
+	if cfg.Talos.PlanNetwork.DNS != "1.1.1.1" {
+		t.Fatalf("fallbacks overwrote explicit DNS: %+v", cfg.Talos.PlanNetwork)
+	}
+}

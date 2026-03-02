@@ -2,6 +2,7 @@ package ubuntu
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -153,3 +154,156 @@ func TestPostInstall_PowerOnError(t *testing.T) {
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
+
+func baseUbuntuInput() profile.Input {
+	return profile.Input{
+		VMName:            "vm1",
+		Username:          "user",
+		PasswordHash:      "$6$hash",
+		NetworkInterface:  "eth0",
+		IPAddress:         "192.168.1.10",
+		Netmask:           "255.255.255.0",
+		Gateway:           "192.168.1.1",
+		DNS:               []string{"1.1.1.1"},
+		OSVersion:         "24.04",
+		VCenterHost:       "vc",
+		VCenterUsername:   "user",
+		VCenterPassword:   "pass",
+		VCenterInsecure:   true,
+		DataDiskMountPath: "/data",
+	}
+}
+
+func baseUbuntuRuntime(isoMgr *isomocks.ManagerInterface, creator *vmmocks.CreatorInterface) profile.Runtime {
+	return profile.Runtime{
+		Creator:          creator,
+		ISOManager:       isoMgr,
+		ISODatastoreName: "ds",
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
+
+func TestProvisionerName(t *testing.T) {
+	if New().Name() != "ubuntu" {
+		t.Fatalf("unexpected profile name: %q", New().Name())
+	}
+}
+
+func TestProvisionAndBoot_DownloadUbuntuFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("", errors.New("download failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected download error")
+	}
+}
+
+func TestProvisionAndBoot_ModifyUbuntuFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("", false, errors.New("modify failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected modify error")
+	}
+}
+
+func TestProvisionAndBoot_CreateNoCloudFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("/tmp/ubuntu-mod.iso", true, nil).Once()
+	isoMgr.On("CreateNoCloudISO", mock.Anything, mock.Anything, mock.Anything, "vm1").Return("", errors.New("nocloud failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected nocloud error")
+	}
+}
+
+func TestProvisionAndBoot_UploadUbuntuFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("/tmp/ubuntu-mod.iso", true, nil).Once()
+	isoMgr.On("CreateNoCloudISO", mock.Anything, mock.Anything, mock.Anything, "vm1").Return("/tmp/nocloud.iso", nil).Once()
+	isoMgr.On("UploadToDatastore", mock.Anything, "/tmp/ubuntu-mod.iso", "ISO/ubuntu/ubuntu-mod.iso", "vc", "user", "pass", true).Return(errors.New("upload failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected upload ubuntu error")
+	}
+}
+
+func TestProvisionAndBoot_UploadNoCloudFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("/tmp/ubuntu-mod.iso", true, nil).Once()
+	isoMgr.On("CreateNoCloudISO", mock.Anything, mock.Anything, mock.Anything, "vm1").Return("/tmp/nocloud.iso", nil).Once()
+	isoMgr.On("UploadToDatastore", mock.Anything, "/tmp/ubuntu-mod.iso", "ISO/ubuntu/ubuntu-mod.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("UploadAlways", mock.Anything, "/tmp/nocloud.iso", "ISO/nocloud/nocloud.iso", "vc", "user", "pass", true).Return(errors.New("upload nocloud failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected upload nocloud error")
+	}
+}
+
+func TestProvisionAndBoot_MountFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("/tmp/ubuntu-mod.iso", true, nil).Once()
+	isoMgr.On("CreateNoCloudISO", mock.Anything, mock.Anything, mock.Anything, "vm1").Return("/tmp/nocloud.iso", nil).Once()
+	isoMgr.On("UploadToDatastore", mock.Anything, "/tmp/ubuntu-mod.iso", "ISO/ubuntu/ubuntu-mod.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("UploadAlways", mock.Anything, "/tmp/nocloud.iso", "ISO/nocloud/nocloud.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("MountISOs", mock.Anything, "[ds] ISO/ubuntu/ubuntu-mod.iso", "[ds] ISO/nocloud/nocloud.iso").Return(errors.New("mount failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected mount error")
+	}
+}
+
+func TestProvisionAndBoot_PowerOnFails(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("/tmp/ubuntu-mod.iso", true, nil).Once()
+	isoMgr.On("CreateNoCloudISO", mock.Anything, mock.Anything, mock.Anything, "vm1").Return("/tmp/nocloud.iso", nil).Once()
+	isoMgr.On("UploadToDatastore", mock.Anything, "/tmp/ubuntu-mod.iso", "ISO/ubuntu/ubuntu-mod.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("UploadAlways", mock.Anything, "/tmp/nocloud.iso", "ISO/nocloud/nocloud.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("MountISOs", mock.Anything, "[ds] ISO/ubuntu/ubuntu-mod.iso", "[ds] ISO/nocloud/nocloud.iso").Return(nil).Once()
+	creator.On("PowerOn", mock.Anything).Return(errors.New("power on failed")).Once()
+
+	_, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err == nil {
+		t.Fatal("expected power-on error")
+	}
+}
+
+func TestProvisionAndBoot_CDRomWarningNonFatal(t *testing.T) {
+	isoMgr := &isomocks.ManagerInterface{}
+	creator := &vmmocks.CreatorInterface{}
+	isoMgr.On("DownloadUbuntu", "24.04").Return("/tmp/ubuntu.iso", nil).Once()
+	isoMgr.On("ModifyUbuntuISO", "/tmp/ubuntu.iso").Return("/tmp/ubuntu-mod.iso", true, nil).Once()
+	isoMgr.On("CreateNoCloudISO", mock.Anything, mock.Anything, mock.Anything, "vm1").Return("/tmp/nocloud.iso", nil).Once()
+	isoMgr.On("UploadToDatastore", mock.Anything, "/tmp/ubuntu-mod.iso", "ISO/ubuntu/ubuntu-mod.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("UploadAlways", mock.Anything, "/tmp/nocloud.iso", "ISO/nocloud/nocloud.iso", "vc", "user", "pass", true).Return(nil).Once()
+	isoMgr.On("MountISOs", mock.Anything, "[ds] ISO/ubuntu/ubuntu-mod.iso", "[ds] ISO/nocloud/nocloud.iso").Return(nil).Once()
+	creator.On("PowerOn", mock.Anything).Return(nil).Once()
+	isoMgr.On("EnsureCDROMsConnectedAfterBoot", mock.Anything).Return(errors.New("warn")).Once()
+
+	res, err := New().ProvisionAndBoot(context.Background(), baseUbuntuInput(), baseUbuntuRuntime(isoMgr, creator))
+	if err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+	if res.NoCloudUploadPath != "ISO/nocloud/nocloud.iso" {
+		t.Fatalf("unexpected nocloud upload path: %s", res.NoCloudUploadPath)
+	}
+}
