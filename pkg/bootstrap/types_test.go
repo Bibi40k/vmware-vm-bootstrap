@@ -263,3 +263,19 @@ func minimalValidConfigForTests() *VMConfig {
 		NetworkName: "LAN",
 	}
 }
+
+func TestEffectiveVersionHelpers(t *testing.T) {
+	cfg := &VMConfig{
+		Profiles: VMProfiles{
+			Ubuntu: UbuntuProfile{Version: "24.04"},
+			Talos:  TalosProfile{Version: "v1.12.4"},
+		},
+	}
+
+	if got := cfg.EffectiveUbuntuVersion(); got != "24.04" {
+		t.Fatalf("EffectiveUbuntuVersion() = %q, want %q", got, "24.04")
+	}
+	if got := cfg.EffectiveTalosVersion(); got != "v1.12.4" {
+		t.Fatalf("EffectiveTalosVersion() = %q, want %q", got, "v1.12.4")
+	}
+}
