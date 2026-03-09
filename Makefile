@@ -1,4 +1,4 @@
-.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements vm-deploy run smoke config talos talos-config check-go
+.PHONY: help build build-cli test test-v test-cover lint fmt vet vulncheck clean deps verify install install-requirements setup vm-deploy run smoke config talos talos-config check-go
 
 # Auto-download Go toolchain if local version < go.mod requirement
 export GOTOOLCHAIN=auto
@@ -26,6 +26,7 @@ help:
 	@printf "    $(GREEN)make lint$(RESET)          Deep linting via golangci-lint (superset of vet)\n"
 	@printf "\n$(BOLD)  Setup$(RESET)\n"
 	@printf "    $(GREEN)make install-requirements$(RESET)  Install all required external tools\n"
+	@printf "    $(GREEN)make setup$(RESET)               Install pre-commit hook\n"
 	@printf "\n$(BOLD)  Testing$(RESET)\n"
 	@printf "    $(GREEN)make test$(RESET)          Run all tests\n"
 	@printf "    $(GREEN)make test-v$(RESET)        Run tests with verbose output\n"
@@ -220,6 +221,20 @@ talos: talos-config
 # Install all required external tools
 install-requirements:
 	@bash scripts/install-requirements.sh
+
+REPO_STANDARDS_KIT ?= ../repo-standards-kit
+
+setup:
+	@mkdir -p .git/hooks
+	@if [ -f "$(REPO_STANDARDS_KIT)/templates/common/hooks/pre-commit" ]; then \
+		cp "$(REPO_STANDARDS_KIT)/templates/common/hooks/pre-commit" .git/hooks/pre-commit; \
+		chmod +x .git/hooks/pre-commit; \
+		printf "$(GREEN)✓ pre-commit hook installed$(RESET)\n"; \
+	else \
+		printf "$(YELLOW)Hook not found at $(REPO_STANDARDS_KIT)/templates/common/hooks/pre-commit$(RESET)\n"; \
+		printf "$(YELLOW)Set REPO_STANDARDS_KIT=<path> to override.$(RESET)\n"; \
+		exit 1; \
+	fi
 
 # Install CLI tool (makes vmbootstrap available in PATH)
 install: check-go
