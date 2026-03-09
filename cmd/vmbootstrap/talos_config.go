@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const talosSchematicsConfigFile = "configs/talos.schematics.sops.yaml"
+var talosSchematicsConfigFile = resolveConfigPath("configs/talos.schematics.sops.yaml")
 
 type talosSchematicsFile struct {
 	Talos talosSchematicsSection `yaml:"talos"`

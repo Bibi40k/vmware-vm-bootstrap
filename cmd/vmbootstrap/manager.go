@@ -82,7 +82,8 @@ func runManager() error {
 func buildMenuItems() []menuItem {
 	var items []menuItem
 
-	_, vcenterErr := os.Stat("configs/vcenter.sops.yaml")
+	vcenterPath := resolveConfigPath("configs/vcenter.sops.yaml")
+	_, vcenterErr := os.Stat(vcenterPath)
 	vcenterExists := vcenterErr == nil
 
 	vcenterTag := "vcenter"
@@ -94,14 +95,14 @@ func buildMenuItems() []menuItem {
 	items = append(items, menuItem{
 		label: menuLabel(vcenterTag, vcenterText),
 		action: func() error {
-			if _, err := os.Stat("configs/vcenter.sops.yaml"); err == nil {
-				return editVCenterConfig("configs/vcenter.sops.yaml")
+			if _, err := os.Stat(vcenterPath); err == nil {
+				return editVCenterConfig(vcenterPath)
 			}
-			return createVCenterConfig("configs/vcenter.sops.yaml")
+			return createVCenterConfig(vcenterPath)
 		},
 	})
 
-	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
+	vmFiles, _ := filepath.Glob(resolveConfigPath("configs/vm.*.sops.yaml"))
 	for _, path := range vmFiles {
 		p := path
 		base := filepath.Base(p)
@@ -113,7 +114,7 @@ func buildMenuItems() []menuItem {
 
 	schematicTag := "schematic"
 	schematicText := "Manage talos.schematics.sops.yaml"
-	if _, err := os.Stat("configs/talos.schematics.sops.yaml"); err != nil {
+	if _, err := os.Stat(talosSchematicsConfigFile); err != nil {
 		schematicTag = "+schematic"
 		schematicText = "Create talos.schematics.sops.yaml"
 	}
@@ -256,7 +257,7 @@ func runBootstrapSelector() error {
 }
 
 func selectVMConfig(title, prompt string) (string, string, error) {
-	vmFiles, _ := filepath.Glob("configs/vm.*.sops.yaml")
+	vmFiles, _ := filepath.Glob(resolveConfigPath("configs/vm.*.sops.yaml"))
 	if len(vmFiles) == 0 {
 		fmt.Println("\n  No VM configs found in configs/vm.*.sops.yaml")
 		fmt.Println("  Run: make config → Create new VM")

@@ -98,7 +98,7 @@ var talosConfigCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", "configs/vcenter.sops.yaml",
+	rootCmd.PersistentFlags().StringVar(&vcenterConfigFile, "vcenter-config", resolveConfigPath("configs/vcenter.sops.yaml"),
 		"Path to vCenter config file (SOPS encrypted)")
 	rootCmd.PersistentFlags().BoolVar(&debugLogs, "debug", false, "Enable debug logging to tmp/vmbootstrap-debug.log")
 	rootCmd.AddCommand(runCmd)

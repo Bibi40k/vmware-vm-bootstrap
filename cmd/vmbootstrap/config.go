@@ -849,7 +849,7 @@ func runCreateWizardWithSeed(outputFile, draftPath string) error {
 			}
 			fmt.Println("  Config name is required")
 		}
-		outputFile = fmt.Sprintf("configs/vm.%s.sops.yaml", slug)
+		outputFile = resolveConfigPath(fmt.Sprintf("configs/vm.%s.sops.yaml", slug))
 	}
 
 	if _, err := os.Stat(outputFile); err == nil {
