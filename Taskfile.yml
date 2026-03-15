@@ -1,0 +1,66 @@
+version: '3'
+
+includes:
+  _common:
+    taskfile: ../Taskfile.common.yml
+    flatten: true
+    dir: '.'
+    vars:
+      REPO_NAME: vmware-vm-bootstrap
+      REPO_STANDARDS_KIT: ../repo-standards-kit
+      CLI_BIN: bin/vmbootstrap
+
+tasks:
+  build-cli:
+    desc: Build vmbootstrap CLI binary
+    deps: [_check-go]
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/vmbootstrap ./cmd/vmbootstrap
+      - 'echo "Built: bin/vmbootstrap"'
+
+  config:
+    desc: Interactive config manager (create/edit VM configs)
+    deps: [build-cli]
+    cmds:
+      - >-
+        bin/vmbootstrap
+        {{if .VCENTER_CONFIG}}--vcenter-config "{{.VCENTER_CONFIG}}"{{end}}
+        {{if .DEBUG}}--debug{{end}}
+
+  vm-deploy:
+    desc: Select a VM config and bootstrap it
+    aliases: [run]
+    deps: [build-cli]
+    cmds:
+      - >-
+        bin/vmbootstrap run
+        {{if .VCENTER_CONFIG}}--vcenter-config "{{.VCENTER_CONFIG}}"{{end}}
+        {{if .DEBUG}}--debug{{end}}
+
+  smoke:
+    desc: Bootstrap + minimal post-install checks + cleanup
+    deps: [build-cli]
+    cmds:
+      - >-
+        bin/vmbootstrap smoke
+        {{if .VM}}--config "{{.VM}}"{{end}}
+        {{if .VCENTER_CONFIG}}--vcenter-config "{{.VCENTER_CONFIG}}"{{end}}
+        {{if .DEBUG}}--debug{{end}}
+
+  talos-config:
+    desc: Configure Talos schematics (extensions → schematic ID)
+    aliases: [talos]
+    deps: [build-cli]
+    cmds:
+      - >-
+        bin/vmbootstrap talos config
+        {{if .VCENTER_CONFIG}}--vcenter-config "{{.VCENTER_CONFIG}}"{{end}}
+        {{if .DEBUG}}--debug{{end}}
+
+  install:
+    desc: Install vmbootstrap CLI to GOPATH/bin
+    deps: [_check-go]
+    cmds:
+      - go install ./cmd/vmbootstrap
+      - 'echo "Installed: vmbootstrap"'
