@@ -10,11 +10,16 @@ define _require_task
 endef
 
 .DEFAULT_GOAL := help
-.PHONY: FORCE help
+.PHONY: FORCE help install-task
 
 help:
 	$(_require_task)
 	@$(_TASK) --list
+
+install-task:
+	@go install github.com/go-task/task/v3/cmd/task@latest
+	@printf "Installed go-task to $$(go env GOPATH)/bin/task\n"
+	@printf "Add to PATH: export PATH=\"\$$HOME/go/bin:\$$PATH\"\n"
 
 # Prevent Make from trying to remake the Makefile itself via %: catch-all
 Makefile GNUmakefile: ;

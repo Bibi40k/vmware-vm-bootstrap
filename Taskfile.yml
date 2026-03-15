@@ -2,7 +2,7 @@ version: '3'
 
 includes:
   _common:
-    taskfile: ../Taskfile.common.yml
+    taskfile: ../repo-standards-kit/Taskfile.common.yml
     flatten: true
     dir: '.'
     vars:
