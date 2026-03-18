@@ -207,6 +207,45 @@ func CreateTalosNodeFromOVA(ctx context.Context, cfg *VMConfig, logger *slog.Log
 	}
 deployed:
 
+	// Reconfigure VM hardware from config (OVA ships with minimal defaults).
+	if cfg.CPUs > 0 || cfg.MemoryMB > 0 {
+		changeArgs := []string{"vm.change", "-vm", cfg.Name}
+		if cfg.CPUs > 0 {
+			changeArgs = append(changeArgs, "-c", fmt.Sprintf("%d", cfg.CPUs))
+		}
+		if cfg.MemoryMB > 0 {
+			changeArgs = append(changeArgs, "-m", fmt.Sprintf("%d", cfg.MemoryMB))
+		}
+		logger.Info("Reconfiguring VM hardware", "cpus", cfg.CPUs, "memory_mb", cfg.MemoryMB)
+		if _, err := runGovc(ctx, env, changeArgs...); err != nil {
+			return nil, fmt.Errorf("reconfigure VM hardware: %w", err)
+		}
+	}
+
+	// Resize OS disk if configured larger than OVA default.
+	if cfg.DiskSizeGB > 0 {
+		logger.Info("Resizing OS disk", "size_gb", cfg.DiskSizeGB)
+		if _, err := runGovc(ctx, env, "vm.disk.change", "-vm", cfg.Name,
+			"-size", fmt.Sprintf("%dG", cfg.DiskSizeGB)); err != nil {
+			return nil, fmt.Errorf("resize OS disk: %w", err)
+		}
+	}
+
+	// Add data disk if specified.
+	if cfg.DataDiskSizeGB != nil && *cfg.DataDiskSizeGB > 0 {
+		diskName := fmt.Sprintf("%s/data-disk", cfg.Name)
+		logger.Info("Adding data disk", "size_gb", *cfg.DataDiskSizeGB, "name", diskName)
+		createArgs := []string{"vm.disk.create", "-vm", cfg.Name,
+			"-size", fmt.Sprintf("%dG", *cfg.DataDiskSizeGB),
+			"-name", diskName}
+		if cfg.Datastore != "" {
+			createArgs = append(createArgs, "-ds", cfg.Datastore)
+		}
+		if _, err := runGovc(ctx, env, createArgs...); err != nil {
+			return nil, fmt.Errorf("add data disk: %w", err)
+		}
+	}
+
 	if _, err := runGovc(ctx, env, "vm.power", "-on", cfg.Name); err != nil {
 		return nil, fmt.Errorf("failed to power on Talos VM: %w", err)
 	}
